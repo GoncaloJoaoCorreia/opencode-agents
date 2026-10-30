@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "driver plan manifest.json",
+  "description": "Machine-readable plan at .plan/<ISSUE-ID>/manifest.json. The driver fans implement out over tasks[] in depends_on order; spec-audit verifies acceptance_criteria[].",
+  "type": "object",
+  "required": ["issue_id", "title", "tasks"],
+  "properties": {
+    "issue_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "title": { "type": "string" },
+    "summary": { "type": "string" },
+    "risks": { "type": "array", "items": { "type": "string" } },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title", "file", "acceptance_criteria"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "title": { "type": "string" },
+          "file": { "type": "string", "description": "tasks/<id>.md under the plan dir" },
+          "depends_on": { "type": "array", "items": { "type": "string" }, "description": "task ids that must be done first" },
+          "files": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "globs of files this task may stage/commit — implement stages only these"
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "text", "verification"],
+              "properties": {
+                "id": { "type": "string" },
+                "text": { "type": "string" },
+                "verification": {
+                  "type": "object",
+                  "required": ["type"],
+                  "properties": {
+                    "type": { "enum": ["command", "manual"] },
+                    "command": { "type": "string", "description": "exact command spec-audit runs (type=command)" },
+                    "instructions": { "type": "string", "description": "what to inspect (type=manual)" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

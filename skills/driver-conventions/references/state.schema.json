@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "driver state.json",
+  "description": "Single source of truth for one driver cycle, at .plan/<ISSUE-ID>/state.json. Written by preplan, read+updated by every phase. Append/merge only — never delete.",
+  "type": "object",
+  "required": ["version", "issue_id", "repo_root", "plan_dir", "created_at", "params", "phases"],
+  "properties": {
+    "version": { "const": 1 },
+    "issue_id": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$",
+      "description": "Linear-style key. Validate against the pattern BEFORE using it in any path (path traversal)."
+    },
+    "spec": {
+      "type": "object",
+      "properties": {
+        "source": { "enum": ["linear", "prompt", "file"] },
+        "ref": { "type": "string", "description": "issue key, file path, or short label" },
+        "title": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "repo_root": { "type": "string" },
+    "plan_dir": { "type": "string", "description": "relative plan dir, e.g. .plan/ABC-123" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "params": {
+      "type": "object",
+      "description": "Driver flags for this run (phases, and future --max-rounds/--qa/--*-variant/...).",
+      "properties": {
+        "phases": {
+          "type": "array",
+          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history"] }
+        }
+      },
+      "additionalProperties": true
+    },
+    "phases": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "status": { "enum": ["pending", "running", "done", "failed", "skipped"] },
+          "summary": { "type": "string", "description": "SHORT (a few lines) — big content lives in .plan/ files" },
+          "started_at": { "type": "string", "format": "date-time" },
+          "completed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "manifest": { "type": "string", "description": "path to manifest.json" },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "title", "file", "status"],
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" },
+              "file": { "type": "string" },
+              "status": { "enum": ["pending", "done", "skipped"] },
+              "commit": { "type": "string", "description": "SHA once implemented" }
+            }
+          }
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "properties": {
+        "verdict": { "enum": ["pass", "fail"] },
+        "rounds": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "review": {
+      "type": "object",
+      "properties": {
+        "verdict": { "enum": ["pass", "fail"] },
+        "rounds": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "properties": {
+        "command": { "type": "string" },
+        "verdict": { "enum": ["pass", "fail", "skipped"] },
+        "exit_code": { "type": "integer" },
+        "log": { "type": "string", "description": "path to full log under .plan/, e.g. .plan/ABC-123/qa.log" },
+        "failures": { "type": "array", "items": { "type": "object" } }
+      }
+    },
+    "history": {
+      "type": "object",
+      "properties": {
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "module": { "type": "string" },
+              "history_file": { "type": "string" },
+              "decision_file": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}

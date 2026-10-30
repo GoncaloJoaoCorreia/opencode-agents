@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  // Optional merge-in for ~/.config/opencode/opencode.jsonc.
+  //
+  // The driver is designed so every phase subagent is spawned directly by the primary
+  // `driver` agent, which keeps subagent nesting at the default depth of 1. Only raise
+  // this if a phase ever needs to spawn its own subagents:
+  //
+  // "experimental": {
+  //   "subagent_depth": 2
+  // }
+}
