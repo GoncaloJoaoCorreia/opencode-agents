@@ -1,0 +1,156 @@
+name: release
+
+# Manual-only release pipeline:
+#   1. validate the repo (scripts/validate.sh)
+#   2. compute the tag (auto patch-bump from latest v* tag, or the `version` input)
+#   3. tag + push main
+#   4. build opencode-agents.tar.gz + SHA256SUMS (the installer's asset convention)
+#   5. create the GitHub release with an auto changelog
+#   6. self-test: download the new release, verify checksum, diff against checkout,
+#      and run install.sh --release into a temp dir
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version as vX.Y.Z (or X.Y.Z). Empty = auto-increment patch from the latest tag."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v5
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Install validation deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck ruby
+
+      - name: Validate repository
+        run: ./scripts/validate.sh
+
+      - name: Compute release version
+        id: version
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          set -eu
+          git fetch --tags --force
+          latest=$(git tag -l 'v*' | sort -V | tail -n 1 || true)
+
+          normalize() { # any vX.Y / vX.Y.Z / X.Y.Z -> vX.Y.Z
+            local v="${1#v}"
+            case "$v" in
+              [0-9]*.[0-9]*.[0-9]*) printf 'v%s\n' "$v" ;;
+              [0-9]*.[0-9]*)       printf 'v%s.0\n' "$v" ;;
+              *) return 1 ;;
+            esac
+          }
+
+          if [ -n "$VERSION_INPUT" ]; then
+            if ! printf '%s' "$VERSION_INPUT" | grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+$'; then
+              echo "invalid version '$VERSION_INPUT': must be vX.Y.Z or X.Y.Z" >&2
+              exit 1
+            fi
+            new=$(normalize "$VERSION_INPUT")
+            if git rev-parse -q --verify "refs/tags/$new" >/dev/null 2>&1; then
+              echo "tag $new already exists" >&2
+              exit 1
+            fi
+            if [ -n "$latest" ]; then
+              latest_n=$(normalize "$latest")
+              if [ "$new" = "$latest_n" ] || [ "$new" = "$(printf '%s\n%s\n' "$latest_n" "$new" | sort -V | head -n 1)" ]; then
+                echo "$new is not greater than the latest tag $latest_n" >&2
+                exit 1
+              fi
+            fi
+          else
+            if [ -n "$latest" ]; then
+              latest_n=$(normalize "$latest")
+              set -- $(printf '%s' "${latest_n#v}" | tr '.' ' ')
+              new="v$1.$2.$(( $3 + 1 ))"
+            else
+              new="v0.1.0"
+            fi
+          fi
+
+          echo "latest=${latest:-none}" >> "$GITHUB_OUTPUT"
+          echo "version=$new" >> "$GITHUB_OUTPUT"
+          echo "new tag: $new (latest was: ${latest:-none})"
+
+      - name: Create and push tag
+        id: tag
+        run: |
+          set -eu
+          tag="${{ steps.version.outputs.version }}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "tag $tag already exists — aborting" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Release $tag"
+          git push origin "refs/tags/$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "pushed tag $tag"
+
+      - name: Build release artifacts
+        run: |
+          set -eu
+          stage_root=$(mktemp -d)
+          mkdir -p "$stage_root/opencode-agents"
+          # -L dereferences symlinked placeholder agents (plan-thorough.md)
+          cp -RL agents commands skills snippets install.sh LICENSE "$stage_root/opencode-agents/"
+          tar -czf opencode-agents.tar.gz -C "$stage_root" opencode-agents
+          sha256sum opencode-agents.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          echo "artifacts: $(tar -tzf opencode-agents.tar.gz | wc -l) files"
+
+      - name: Create GitHub release
+        run: |
+          set -eu
+          tag="${{ steps.tag.outputs.tag }}"
+          latest="${{ steps.version.outputs.latest }}"
+          if [ "$latest" != "none" ]; then
+            header="Changes since $latest"
+            body=$(git log --oneline "${latest}..HEAD")
+          else
+            header="All changes"
+            body=$(git log --oneline)
+          fi
+          gh release create "$tag" opencode-agents.tar.gz SHA256SUMS \
+            --title "$tag" \
+            --notes "## $header"$'\n\n'"$body"
+          echo "created release $tag"
+
+      - name: Self-test the new release
+        run: |
+          set -eu
+          tag="${{ steps.tag.outputs.tag }}"
+          t=$(mktemp -d)
+          gh release download "$tag" --dir "$t" --pattern opencode-agents.tar.gz --pattern SHA256SUMS
+          (cd "$t" && sha256sum -c SHA256SUMS)
+          tar -xzf "$t/opencode-agents.tar.gz" -C "$t"
+          diff -r "$t/opencode-agents/agents" agents
+          diff -r "$t/opencode-agents/commands" commands
+          diff -r "$t/opencode-agents/skills" skills
+          # full installer path: download payload, verify checksum, install into temp dir
+          sh install.sh --release --dest "$t/cfg"
+          test -f "$t/cfg/agents/driver.md"
+          test -f "$t/cfg/opencode-agents.manifest"
+          echo "self-test OK: release $tag verifies and installs"

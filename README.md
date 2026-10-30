@@ -17,12 +17,38 @@ conversation ever has to hold the whole cycle.
 ## Quick start
 
 ```sh
-./install.sh        # copies agents/, commands/, skills/ into ~/.config/opencode/
+curl -fsSL https://raw.githubusercontent.com/GoncaloJoaoCorreia/opencode-agents/main/install.sh | sh
 ```
 
-Re-run `./install.sh` after pulling changes — OpenCode reloads config automatically, no
-restart needed. (The install is copy-based on purpose; don't symlink the directories
-yourself — see [AGENTS.md](AGENTS.md) for why.)
+The installer downloads the latest GitHub release payload (`opencode-agents.tar.gz`),
+verifies it against the release's `SHA256SUMS`, and installs `agents/`, `commands/`,
+`skills/` into `~/.config/opencode/` (or `$XDG_CONFIG_HOME/opencode`). OpenCode reloads
+config automatically — no restart needed.
+
+Working in a local checkout of this repo? Run `./install.sh` there instead — it detects the
+checkout and installs straight from source (same copy-based install; nothing is built).
+Re-run it after pulling changes.
+
+### Install details
+
+- **Latest release only.** Each install stamps `opencode-agents.version` and writes
+  `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
+  that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`
+  and those two meta files.
+- **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
+  symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
+- Releases are cut with the manual **Release** workflow on GitHub (semver tag
+  auto-incremented from the latest, validated repo, checksummed assets attached).
+- **The repo is currently private**, so the plain one-liner needs the repo to be public.
+  While private, fetch the installer through the API with a token instead:
+
+  ```sh
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" \
+    https://api.github.com/repos/GoncaloJoaoCorreia/opencode-agents/contents/install.sh | sh
+  ```
+
+  (The installer then downloads the release payload via the GitHub API using the same
+  token, or via `gh` if authenticated.)
 
 Before your first run, in the repo you want to work on:
 

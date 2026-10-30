@@ -6,12 +6,28 @@ lint, or CI here; this repo is pure config/markdown plus `install.sh`.
 
 ## Install / verify
 
-- `./install.sh` copies `agents/`, `commands/`, `skills/` into `~/.config/opencode/`.
-  **Re-run it after every edit here** — OpenCode reloads config automatically, no restart.
+- `./install.sh` is dual-mode and auto-detects: inside this checkout (`.git/` + `agents/`
+  next to the script) it installs by **copying from source** — nothing is built. Run
+  standalone (e.g. `curl …/install.sh | sh`, where `$0` is not a file) it downloads the
+  latest GitHub release payload and installs from that. Flags: `--source` / `--release`
+  force a mode, `--dest DIR` overrides the target (default
+  `${XDG_CONFIG_HOME:-~/.config}/opencode`). **Re-run `./install.sh` after every edit
+  here** — OpenCode reloads config automatically, no restart.
+- **Release assets convention:** each GitHub release carries exactly `opencode-agents.tar.gz`
+  (one top-level `opencode-agents/` dir with `agents/ commands/ skills/ snippets/
+  install.sh LICENSE`) and `SHA256SUMS` (sha256sum format). The installer fetches them from
+  `releases/latest/download/` (public repo) or via the API/`gh` with a token (private repo
+  — currently private). **Releases are cut by the Release workflow (see Releases below),
+  which builds and uploads these assets** — don't hand-upload them; v0.1 was seeded manually
+  before the workflow existed.
+- Each install writes `opencode-agents.version` + `opencode-agents.manifest` into the
+  config dir; the manifest drives stale-file cleanup on reinstall. Installs only touch
+  `agents/ commands/ skills/` + those two meta files.
 - Install is **copy-based on purpose** (`cp -RL`): do NOT symlink these dirs into
   `~/.config/opencode/` or `.opencode/` — OpenCode's discovery skips symlinked agent files
   (e.g. the `agents/driver/plan-thorough.md` symlink placeholder won't register).
-- Sanity check after changes: `opencode debug agents` should list `driver` and `driver/*`.
+- Sanity check after changes: `opencode debug agents` should list `driver` and `driver/*`
+  (after installing; smoke-test with a throwaway `XDG_CONFIG_HOME` first).
 
 ## Layout
 
@@ -22,8 +38,24 @@ commands/driver.md          # /driver entry point (static `!` shell blocks — s
 commands/phases/*.md        # standalone /phases/<phase> wrappers (subagent: true)
 skills/driver-conventions/  # THE single source of truth for all shared contracts
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
-install.sh                  # global copy-based installer
+scripts/validate.sh         # pre-release validation (frontmatter, schemas, cross-refs) — CI + local
+.github/workflows/release.yml  # manual release pipeline (see Releases)
+install.sh                  # dual-mode installer (source checkout vs checksum-verified release)
 ```
+
+## Releases
+
+- Cut a release with the manual **Release** workflow (`.github/workflows/release.yml`,
+  "Run workflow" button on `main`). Optional `version` input (`vX.Y.Z` or `X.Y.Z`; must be
+  new and greater than the latest tag); empty = auto patch-bump of the latest `v*` tag
+  (`v0.1` normalizes to `v0.1.0` → next `v0.1.1`; no tags → `v0.1.0`).
+- The workflow: runs `scripts/validate.sh` → tags + pushes `main` → builds
+  `opencode-agents.tar.gz` + `SHA256SUMS` (the asset convention install.sh expects) →
+  creates the GitHub release with an auto changelog → self-tests (download, checksum,
+  diff vs checkout, `install.sh --release` into a temp dir).
+- Run `./scripts/validate.sh` locally before pushing release-relevant changes.
+- The workflow operates on remote `main` — commit + push first, or the release ships
+  stale content.
 
 ## Contracts — one source of truth
 
