@@ -2,130 +2,114 @@
 
 A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands and skills.
 
-Currently shipped: the **driver** — an orchestrated, multi-phase feature development cycle.
-
-## The driver
-
-`/driver` conducts an entire feature cycle. Each phase runs as its own subagent with a fresh
-context window; phases coordinate through a state file, and the driver (primary agent) keeps
-only short summaries — so no single context ever holds the whole cycle.
+It currently ships one thing: the **driver** — `/driver` runs an entire feature cycle
+(plan → implement → audit → review → QA → history) for you. Each phase runs as its own
+subagent with a fresh context window, coordinated through a state file, so no single
+conversation ever has to hold the whole cycle.
 
 ```
-/driver ABC-123 [--phases preplan,plan,...] [--worktree]
+/driver ABC-123
    │
    ▼
-┌─────────┐ ┌──────┐ ┌───────────────┐ ┌────────────┐ ┌─────────────┐ ┌──────────────┐ ┌───────────────┐
-│ preplan │→│ plan │→│ implement ×N  │→│ spec-audit │→│ code-review │→│ quality-gate │→│ write-history │
-└─────────┘ └──────┘ └───────────────┘ └────────────┘ └─────────────┘ └──────────────┘ └───────────────┘
+ preplan → plan → implement ×N → spec-audit → code-review → quality-gate → write-history
 ```
 
-| Phase | Agent ID | Standalone command | Does |
-|---|---|---|---|
-| preplan | `driver/preplan` | `/phases/preplan` | fills spec (Linear issue via `linear-project` MCP, or prompt/file → `.plan/<slug>/spec.md`), detects+confirms QA command, warns if `.plan/` not gitignored, writes state |
-| plan | `driver/plan` | `/phases/plan` | writes `.plan/<slug>/plan.md` + `manifest.json` + `tasks/*.md` with verifiable acceptance criteria |
-| implement | `driver/implement` | `/phases/implement` | spawned once per plan task by the driver; one conventional commit per task |
-| spec-audit | `driver/spec-audit` | `/phases/spec-audit` | verifies acceptance criteria (runs `verification.command`s); report-only |
-| code-review | `driver/code-review` | `/phases/code-review` | reviews the cycle's commits, severity-prioritized; report-only |
-| quality-gate | `driver/quality-gate` | `/phases/quality-gate` | runs `state.qa.command`, records verdict + failures |
-| write-history | `driver/write-history` | `/phases/write-history` | appends `agent/<module>/{history,decisions}.md` and commits them (`docs(driver): ...`) |
-
-The driver owns all loops and fan-out (subtask implementations, audit/review repair rounds)
-because subagent nesting depth defaults to 1. Audit/review stay read-only; the driver spawns
-`driver/implement` again to apply fixes in bounded rounds.
-
-## Install
+## Quick start
 
 ```sh
-./install.sh
+./install.sh        # copies agents/, commands/, skills/ into ~/.config/opencode/
 ```
 
-Copies `agents/`, `commands/`, `skills/` into `~/.config/opencode/` (global, copy-based —
-re-run after editing this repo). OpenCode reloads config automatically, no restart needed.
-Note: `cp -RL` dereferences symlinks on purpose — the `plan-thorough` variant placeholder is
-a symlink in this repo, and OpenCode's discovery does not follow symlinked agent *files*
-(verified: `opencode debug agents` skips them). So install through this script; don't
-symlink `.opencode/` into a project directly or the variant won't register.
+Re-run `./install.sh` after pulling changes — OpenCode reloads config automatically, no
+restart needed. (The install is copy-based on purpose; don't symlink the directories
+yourself — see [AGENTS.md](AGENTS.md) for why.)
 
-Prerequisites:
+Before your first run, in the repo you want to work on:
 
-- Linear MCP server configured (e.g. in the target repo's `opencode.jsonc`):
-  `"mcp": { "linear-project": { "type": "remote", "url": "https://mcp.linear.app/mcp", "enabled": true } }`
-  — the driver uses it read-only (`get_issue`, `list_comments`, …).
-- In every repo you run the driver in, add `.plan/` to `.gitignore` (see `snippets/gitignore.txt`).
-  `.plan/` is scratch and gitignored; `agent/` is committed.
-- Pick a model + variant with `/models` before running — all driver agents inherit the session model.
+1. Configure the Linear MCP server in that repo's `opencode.jsonc` (the driver reads issues
+   through it, read-only):
+
+   ```jsonc
+   { "mcp": { "linear-project": { "type": "remote", "url": "https://mcp.linear.app/mcp", "enabled": true } } }
+   ```
+
+2. Add `.plan/` to that repo's `.gitignore` (ready-made line in `snippets/gitignore.txt`).
+3. Pick a model (and variant) with `/models` — all driver phases inherit your session model.
+
+Then, from the repo root:
+
+```text
+/driver ABC-123        # full cycle for a Linear issue
+```
+
+## What a run does
+
+| Phase | Run standalone | What happens |
+|---|---|---|
+| preplan | `/phases/preplan` | Fetches the Linear issue (or takes a pasted/file spec), picks the QA command, checks the repo setup, writes `.plan/<slug>/state.json` |
+| plan | `/phases/plan` | Explores the code and writes `.plan/<slug>/plan.md` + `manifest.json` + `tasks/*.md` — you get asked to approve the plan before anything is built |
+| implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope) |
+| spec-audit | `/phases/spec-audit` | Verifies every acceptance criterion against the actual code/commits (runs the plan's verification commands) |
+| code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
+| quality-gate | `/phases/quality-gate` | Runs the project's test/lint/build command and records the verdict |
+| write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
+
+Audit and review never edit code — when they find something, the driver sends `implement`
+back with just those findings, in bounded repair rounds. If anything fails, the driver
+asks you whether to retry, skip, or abort. Re-running `/driver` resumes from
+`.plan/<slug>/state.json` instead of starting over.
+
+Pre-flight: you must be in a git repo (the session moves to the repo root if needed); a
+dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver creates a
+`feat/<slug>` branch for you.
 
 ## Usage
 
 ```text
-/driver ABC-123                            # full cycle, fetches the Linear issue
-/driver "add rate limiting to the API"     # raw spec — driver asks for a slug (e.g. ABC-123)
-/driver ABC-123 --phases plan,implement    # only some phases; state.json keeps progress, so this resumes
-/driver ABC-123 --worktree                 # whole cycle inside a new git worktree named ABC-123
-/driver ABC-123 --max-rounds 3 --qa "npm test" --force   # cap repair rounds, pin QA cmd, re-run done phases
-/driver ABC-123 --plan-variant thorough    # variant implementation of a phase (once the agent exists)
-/phases/spec-audit ABC-123                 # run a single phase standalone
+/driver ABC-123                                  # full cycle, fetches the Linear issue
+/driver "add rate limiting to the API"           # raw spec — the driver asks for a slug (e.g. ABC-123)
+/driver ABC-123 --phases plan,implement          # only some phases (progress is kept, so this resumes)
+/driver ABC-123 --worktree                       # whole cycle inside a new git worktree named ABC-123
+/driver ABC-123 --max-rounds 3 --qa "npm test"   # cap repair rounds, pin the QA command
+/driver ABC-123 --force                          # re-run the requested phases even if already done
+/driver ABC-123 --plan-variant thorough          # use a variant implementation of a phase
+/phases/spec-audit ABC-123                       # run a single phase standalone
 ```
 
-Flags (parsed by the driver into `state.params`; on resume, new flags win): `--phases`,
-`--worktree`, `--max-rounds N` (default 2), `--qa "cmd"`, `--force` (re-runs all requested
-phases), `--<phase>-variant <name>` (resolved via the VARIANTS table).
+| Flag | Effect |
+|---|---|
+| `--phases a,b,...` | Run only these phases (default: all) |
+| `--worktree` | Run the cycle in a new git worktree named after the slug |
+| `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
+| `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |
+| `--force` | Re-run the requested phases even if marked done |
+| `--<phase>-variant <name>` | Swap in a variant implementation of a phase |
 
-Limitation: the driver needs an interactive client (it and preplan use the `question` tool);
-headless `opencode run` is not supported.
+## What lands in your repo
 
-Driver pre-flight: must run from a git repo (session moves to repo root if needed); dirty tree
-→ asks (default abort); on `main`/`master`/`develop`/`dev` it creates `feat/<slug>`.
+- **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md`,
+  `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`.
+- **Commits** — one per plan task, conventional format with the module as scope
+  (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. The driver never pushes.
+- **`agent/<module>/history.md` and `decisions.md`** — committed by the final phase as a
+  `docs(driver): ...` commit. Module = first path segment of the changed files under
+  `src/` (else first segment, else `core`).
+- **Branch** — `feat/<slug>`, created automatically on protected branches.
 
-Optional: OpenCode's built-in `/goal "<objective>"` (merged in anomalyco/opencode#59437) can wrap
-a driver session — the driver is idempotent via `state.json`, so repeated goal rounds just resume
-and eventually no-op. Note `/goal` is a TUI command and is not available in headless `opencode run`.
+## Requirements & limitations
 
-## Layout
+- **Interactive TUI only.** The driver asks questions along the way (slug, plan approval,
+  QA command, retries), so headless `opencode run` is not supported.
+- **Linear is used read-only** (`get_issue`, `list_comments`, …); the driver never comments
+  on or updates issues.
+- All phases inherit your session's model/variant (`/models`).
+- Optional: OpenCode's built-in `/goal "<objective>"` can wrap a driver session — the
+  driver is idempotent via `state.json`, so repeated goal rounds just resume. (`/goal` is a
+  TUI command and isn't available in headless `opencode run`.)
 
-```
-agents/driver.md            # primary orchestrator agent (id: driver)
-agents/driver/*.md          # phase subagents (ids: driver/preplan, driver/plan, ...)
-commands/driver.md          # /driver entry point
-commands/phases/*.md        # /phases/<phase> standalone wrappers (subagent: true)
-skills/driver-conventions/  # shared contracts: state.json + manifest schemas, commit msg format, history format, run policy
-snippets/                   # optional opencode.jsonc bits + .gitignore snippet for target repos
-install.sh                  # global copy-based installer
-```
+## Hacking on this library
 
-## Contracts & decisions (locked in)
-
-All file formats and policies live in `skills/driver-conventions/SKILL.md` — single source of
-truth, loaded first by every phase. Highlights:
-
-- Slug = `issue_id`, pattern `^[A-Z][A-Z0-9]+-[0-9]+$`, validated before any path use.
-- Commits: conventional, scope (module) required, types `feat|fix|chore|docs|refactor|test|perf|ci|build`,
-  trailers `Driver-Task:` + `Refs:`. One commit per task; only `implement` commits code,
-  only `write-history` commits `agent/` (`docs(driver): ...`). Never push.
-- Module for history files = first path segment of changed files under `src/`, else first segment, else `core`.
-- QA command: preplan auto-detects (package.json scripts / Makefile / CI workflow) and confirms via `question`.
-- Linear MCP: read-only; write tools denied in the phase agents' permissions.
-- Interactive-only: headless `opencode run` is not supported (the driver relies on the
-  `question` tool).
-
-## Extension points
-
-- **New phase**: add `agents/driver/<phase>.md`, `commands/phases/<phase>.md`, and a row in the
-  phase registry in `agents/driver.md`.
-- **Variants of a sub-step**: a row in the driver's VARIANTS table maps a
-  `--<phase>-variant <name>` flag to an agent ID. `plan-thorough` is currently a symlink to
-  `plan.md` — a placeholder showing the mechanism; replace it with a real agent file (same
-  output contract) when an actual variant is needed.
-- **New driver flags**: parse them in section 1 of `agents/driver.md` and record in `state.params`.
-
-## Gotchas (do not skip)
-
-- No built-in cross-phase state: `.plan/<slug>/state.json` IS the handoff. Phases return short
-  summaries; big artifacts live in files under `.plan/` referenced by path.
-- Subagent nesting depth is 1 by default (`experimental.subagent_depth` raises it) — hence driver-owned loops.
-- The `question` tool needs an interactive client: phases are spawned in the foreground.
-- Permissions are scoped to `driver` / `driver/*` agents only — nothing global is touched.
-  `git push` is denied everywhere.
-- Model availability is project-scoped; phases deliberately set no `model` and inherit the session's.
-- `!` shell blocks in command templates run outside the permission flow — they are static in
-  `commands/driver.md` on purpose; never add `$ARGUMENTS` to one.
+The repo layout, file-format contracts (`.plan/<slug>/state.json`, `manifest.json`, commit
+and history formats — single source of truth in `skills/driver-conventions/SKILL.md` with
+JSON schemas beside it), extension points, and hard-won gotchas are documented in
+[AGENTS.md](AGENTS.md).
