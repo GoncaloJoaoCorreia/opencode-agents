@@ -1,62 +1,83 @@
 ---
-description: Driver phase 1 — validate inputs (Linear issue or spec, git repo), ask the user for anything missing, write .plan/<ID>/state.json
+description: Driver phase 1 — collect the spec (Linear issue via the linear-project MCP server, or pasted/file spec), detect+confirm the QA command, check .plan/ is gitignored, and fill in .plan/<SLUG>/state.json
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
   - { action: "subagent", resource: "*", effect: "deny" }   # nesting depth 1: the driver owns fan-out
   - { action: "edit", resource: "*", effect: "deny" }
-  - { action: "edit", resource: ".plan/**", effect: "allow" } # this phase only writes the state file
+  - { action: "edit", resource: ".plan/**", effect: "allow" } # this phase only writes under .plan/
   - { action: "shell", resource: "*", effect: "ask" }
   - { action: "shell", resource: "git rev-parse *", effect: "allow" }
   - { action: "shell", resource: "git status *", effect: "allow" }
   - { action: "shell", resource: "git log *", effect: "allow" }
   - { action: "shell", resource: "git branch *", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
-  # Linear MCP tools. TODO: replace "linear" with your MCP server name (action = <server>_<tool>)
-  # and narrow to the read-only tools. Write-back (comment on issue, status change) is a
-  # future opt-in flag — keep write tools unapproved until then.
-  - { action: "linear_*", resource: "*", effect: "ask" }
+  # Linear MCP — server name "linear-project" (https://mcp.linear.app/mcp) in the target
+  # repo's opencode.jsonc. Action names sanitize unsupported chars to "_", so cover both
+  # "linear-project_*" and "linear_project_*". READ-ONLY for v1: all calls ask, and the
+  # write tools are hard-denied. Linear is read-only for the driver, permanently.
+  - { action: "linear-project_*", resource: "*", effect: "ask" }
+  - { action: "linear_project_*", resource: "*", effect: "ask" }
+  - { action: "linear-project_create_*", resource: "*", effect: "deny" }
+  - { action: "linear-project_update_*", resource: "*", effect: "deny" }
+  - { action: "linear-project_save_*", resource: "*", effect: "deny" }
+  - { action: "linear-project_delete_*", resource: "*", effect: "deny" }
+  - { action: "linear_project_create_*", resource: "*", effect: "deny" }
+  - { action: "linear_project_update_*", resource: "*", effect: "deny" }
+  - { action: "linear_project_save_*", resource: "*", effect: "deny" }
+  - { action: "linear_project_delete_*", resource: "*", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
 
 # Phase: preplan
 
-Validate that everything later phases need is present, then create the cycle's state file.
-Change nothing else.
+The driver has already: parsed args, resolved the slug, handled `--worktree`, run git
+pre-flight (repo check, dirty-tree question, `feat/<slug>` branch on protected branches),
+and written the initial `.plan/<slug>/state.json` with all phases `pending`.
+Your job: fill in the spec, the QA command, and warnings — then mark preplan done.
 
 ## Inputs (from the driver's prompt)
 
-- repo root, current branch
-- issue key (e.g. `ABC-123`) or raw spec (pasted text / file path)
-- plan dir `.plan/<ISSUE-ID>/`, params (requested phases, ...)
+- `statePath` — absolute path to `.plan/<slug>/state.json`
+- `slug`, `issueOrSpec` (Linear key or raw spec), `repoRoot`, `branch`
+- `params` — { phases: [...], worktree: bool }
 
 ## Steps
 
-1. Load the `driver-conventions` skill — follow its state.json schema exactly.
-2. Validate the issue ID against `^[A-Z][A-Z0-9]+-[0-9]+$` BEFORE using it in any path.
-   Reject anything else outright (path traversal).
-3. Confirm the operating directory is a git repo (`git rev-parse --is-inside-work-tree`).
-   If not, ask the user with the `question` tool how to proceed — do not guess.
-4. If the argument is a Linear issue key: fetch the issue via the Linear MCP tools
-   (discover exact tool names at runtime; calls need approval). Record title, description,
-   acceptance criteria, and URL in `state.spec`.
-5. Otherwise record the raw spec as `state.spec = { source: "prompt" | "file", ... }`.
-6. TODO: detect the project's validation command (package.json scripts / Makefile / CI
-   workflow) into `state.qa.command` — or ask the user via `question` (becomes `--qa` later).
-7. Warn if `.plan/` is not in the target repo's `.gitignore` (read-only check; you may not
-   edit outside `.plan/**` — record the warning in state and in your summary).
-8. Write `.plan/<ISSUE-ID>/state.json` (create dirs). Set every `phases.*.status = "pending"`.
+1. Load the `driver-conventions` skill — follow its schemas exactly.
+2. **Spec.** If `issueOrSpec` matches `^[A-Z][A-Z0-9]+-[0-9]+$`:
+   - Call the Linear MCP tools (`linear-project_get_issue` with `id` = the key,
+     `format: "markdown"`; then `linear-project_list_comments` with the returned issue id).
+     Check your actual tool list — names are `<server>_<tool>`.
+   - If the issue is not found or the server is unreachable, ask via `question`:
+     treat the key as a plain slug, or paste the spec?
+   - Record `state.spec = { source: "linear", ref: <key>, title, url }`. Keep any excerpt SHORT —
+     the full description stays in Linear; later phases re-fetch what they need.
+   - Else, if `issueOrSpec` is a path to an existing file: read it,
+     `state.spec = { source: "file", ref: <path>, title: <first heading> }`.
+   - Else: write the raw spec to `.plan/<slug>/spec.md` and record
+     `state.spec = { source: "prompt", ref: slug, spec_file: ".plan/<slug>/spec.md" }`.
+     (A file under .plan/ keeps state.json small and gives later phases a stable reference.)
+3. **QA command** (only if `"quality-gate"` is in `params.phases`):
+   - If `params.qa` is set (driver `--qa "cmd"`): use it directly — `state.qa.command = params.qa`,
+     skip detection and the question.
+   - Else detect candidates read-only: `package.json` scripts (`test`, `check`, `lint`,
+     `typecheck`), `Makefile` (`test`/`check` targets), `.github/workflows/*.yml` test steps.
+   - Ask via `question` to confirm: options = detected candidates + "skip quality-gate" + free-form.
+     Store the choice in `state.qa.command` (and `state.qa.candidates`).
+4. **`.gitignore` check:** read the repo-root `.gitignore`. If it has no `.plan/` entry, append
+   `".plan/ is not gitignored in this repo — add it (see the driver's snippets/gitignore.txt)"`
+   to `state.warnings`. You may NOT edit files outside `.plan/**`.
+5. Merge everything into `state.json` (never clobber existing fields):
+   `spec`, `qa`, `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)
 
-- Update `state.json`: `phases.preplan = { status: "done", summary, ... }`.
-- Return a SHORT summary: issue id, spec source, plan dir, qa command, warnings.
-  Do NOT paste the full spec into your reply — it lives in state / Linear.
+Return a SHORT summary only: slug, spec source, qa command (or "skipped"), warnings.
+Do NOT paste the spec or issue body into your reply.
 
 ## Gotchas
 
-- You are spawned in the FOREGROUND so the `question` tool works. In headless
-  `opencode run` (TODO: `--non-interactive`), fail fast with a clear "missing input: X"
-  instead of asking.
-- If `state.json` already exists for this issue: do not overwrite — merge/resume and say what exists.
-- Never put the issue ID or spec text into a shell command unvalidated/unquoted.
+- You run in the FOREGROUND so `question` works.
+- Validate any ID against the pattern before using it in a path.
+- Never put the issue key or spec text into a shell command unvalidated/unquoted.

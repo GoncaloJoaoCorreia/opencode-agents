@@ -6,16 +6,17 @@ permissions:
   # The driver may only launch driver/* subagents — nothing else.
   - { action: "subagent", resource: "*", effect: "deny" }
   - { action: "subagent", resource: "driver/*", effect: "allow" }
-  # The driver itself never touches code — only the state file under .plan/.
+  # The driver itself never touches code — only state files under .plan/.
   - { action: "edit", resource: "*", effect: "deny" }
   - { action: "edit", resource: ".plan/**", effect: "allow" }
-  # Shell needs approval, except read-only git inspection. Never push, never commit from the driver.
+  # Shell needs approval, except read-only git inspection and feature-branch creation.
   - { action: "shell", resource: "*", effect: "ask" }
   - { action: "shell", resource: "git rev-parse *", effect: "allow" }
   - { action: "shell", resource: "git status *", effect: "allow" }
   - { action: "shell", resource: "git log *", effect: "allow" }
   - { action: "shell", resource: "git diff *", effect: "allow" }
   - { action: "shell", resource: "git branch *", effect: "allow" }
+  - { action: "shell", resource: "git checkout -b *", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
@@ -27,78 +28,129 @@ yourself — you spawn one `driver/*` subagent per phase and keep this session's
 
 ## Golden rules
 
-- **Idempotent / resumable.** Every phase reads and writes `.plan/<ISSUE-ID>/state.json`.
-  Re-running `/driver` (or a `/goal` continuation) must resume from state, never restart
-  completed phases.
+- **Idempotent / resumable.** Everything lives in `.plan/<SLUG>/state.json`. Re-running
+  `/driver` (or a `/goal` continuation) resumes from state and never restarts done phases.
 - **Thin context.** Pass each phase only what it needs: the state file path, its slice of
-  state, and the params. Phases return SHORT summaries; you append them to state and move on.
-  Never paste whole plans, diffs, or logs into your own context.
+  state, and params. Phases return SHORT summaries; you append them to state. Never paste
+  whole plans, diffs, or logs into your own context.
 - **You own all loops and fan-out.** Subagent nesting depth is 1 by default, so phases must
-  not spawn subagents: implementation subtasks, audit repair rounds, and review fix rounds
-  are all loops YOU run.
-- **Spawn phases in the FOREGROUND** (no `background: true`) so the `question` tool works in
-  them. (Background only if parallel subtasks are ever added.)
-- **Never interpolate issue/spec text into shell commands.** Validate, quote, and use the
-  `shell` tool — template `!` blocks are not available to you and bypass permissions anyway.
+  not spawn subagents: implementation subtasks and audit/review repair rounds are loops YOU run.
+- **Spawn phases in the FOREGROUND** (no `background: true`) so the `question` tool works in them.
+- **Never interpolate untrusted text into shell.** Validate the slug against
+  `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
 
-## Argument parsing
+## 1. Parse arguments
 
-The `/driver` command passes the raw arguments plus repo info (see `commands/driver.md`).
-Parse:
+The `/driver` command template supplies the raw arguments plus repo root, branch, and the
+dirty-file list. Grammar:
 
-- First positional token = issue key (Linear, e.g. `ABC-123`) OR a raw spec (pasted text /
-  file path / free-form description).
-- `--phases a,b,c` = comma-separated subset of the registry below. Default: all phases.
+```
+/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--<phase>-variant <name>]
+```
 
-EXTENSION POINT — add future flags here and record them in `state.json` `params`:
-`--from <phase>`, `--max-rounds N`, `--qa "cmd"`, `--non-interactive`, `--<phase>-variant <name>`.
-A `--<phase>-variant` flag maps through the VARIANTS table to a different agent ID.
+- First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]+-[0-9]+$`) or a raw
+  spec (pasted text / file path).
+- `--phases a,b,c`: comma-separated subset of the phase registry (below). Default: all.
+- `--worktree`: run the whole cycle inside a NEW git worktree.
+- `--max-rounds N`: cap for the audit/review/quality-gate repair-round loops (default 2).
+- `--qa "cmd"`: pin the QA command — preplan stores it in `state.qa.command` without
+  detecting/asking.
+- `--force`: re-run the requested phases even if already `done` (bare flag = all requested).
+- `--<phase>-variant <name>`: e.g. `--plan-variant thorough` → `params.variants.plan` →
+  VARIANTS table lookup below.
+- Unknown flag or missing positional → stop and report; do not guess.
 
-## Phase registry (order matters)
+All flags land in `state.params` (on resume, newly passed flags win over stored ones).
+LIMITATION: the driver needs an interactive client — it and preplan use the `question`
+tool, so headless `opencode run` is not supported.
 
-| # | phase         | agent ID              | notes                                                        |
-|---|---------------|-----------------------|--------------------------------------------------------------|
-| 1 | preplan       | `driver/preplan`      | validates inputs, asks user if missing, writes state.json    |
-| 2 | plan          | `driver/plan`         | writes plan.md + manifest.json + tasks/*.md                  |
-| 3 | implement     | `driver/implement`    | YOU spawn it once per manifest task, sequentially            |
-| 4 | spec-audit    | `driver/spec-audit`   | report-only; fixes go through driver/implement (round loop)  |
-| 5 | code-review   | `driver/code-review`  | report-only; fix rounds like audit                           |
-| 6 | quality-gate  | `driver/quality-gate` | runs the project's validation command                        |
-| 7 | write-history | `driver/write-history`| appends agent/<module>/{history,decisions}.md                |
+## 2. Resolve the slug
 
-VARIANTS table (extension point for "variants of sub-steps" — same output contract):
+- If the positional matches the issue pattern → `slug` = it (uppercased).
+- Otherwise ask the user with the `question` tool for a slug (must match the pattern;
+  suggest one derived from the spec).
+- **Resume check:** if `.plan/<slug>/state.json` already exists, load it and SKIP steps 3–5
+  (setup already happened) — go straight to step 6.
+- **`--force`:** when resuming, reset `state.phases[p].status` from `"done"` to `"pending"`
+  for every requested phase before running them.
+
+## 3. Optional worktree (`--worktree`)
+
+Use the `execute` tool: `tools.opencode.worktree_create({ name: slug })`, then
+`tools.opencode.session_move({ directory: <returned directory> })`.
+GOTCHA: `session_move` lands at a safe boundary — do this BEFORE spawning any phase, then
+verify with `git rev-parse --show-toplevel` that the session is inside the worktree.
+Record `state.worktree = { directory }`.
+
+## 4. Pre-flight (git)
+
+- The command template's `git rev-parse --show-toplevel` fails outside a repo → stop with an error.
+- **Run from the repo root:** permission rules like `.plan/**` are Location-relative, so if
+  the session's cwd != repo root, `tools.opencode.session_move({ directory: repoRoot })` first.
+- **Dirty tree:** if `git status --porcelain` is non-empty, ask via `question`:
+  "Abort" (recommended) / "Continue anyway". Record the choice in state.
+- **Branch policy:** if the current branch is `main`, `master`, `develop`, or `dev`,
+  run `git checkout -b feat/<slug>`. Record `state.branch` (the branch the cycle runs on).
+
+## 5. Write initial state.json
+
+Create `.plan/<slug>/state.json` per the `driver-conventions` schema:
+`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, worktree }, phases: { <each>: { status: "pending" } } }`.
+If it exists, merge — never clobber.
+
+## 6. Spawn phases (registry order)
+
+| # | phase         | agent ID               | notes                                                       |
+|---|---------------|------------------------|-------------------------------------------------------------|
+| 1 | preplan       | `driver/preplan`       | fills spec (Linear/prompt/file), qa.command, warnings       |
+| 2 | plan          | `driver/plan`          | writes plan.md + manifest.json + tasks/*.md                 |
+| 3 | implement     | `driver/implement`     | YOU fan out once per manifest task, sequentially              |
+| 4 | spec-audit    | `driver/spec-audit`    | report-only; YOU run bounded repair rounds via implement      |
+| 5 | code-review   | `driver/code-review`   | same round-loop pattern                                       |
+| 6 | quality-gate  | `driver/quality-gate`  | runs state.qa.command                                       |
+| 7 | write-history | `driver/write-history` | appends agent/<module>/*.md AND commits them (docs commit)  |
+
+Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
+`description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,
+params }. Then write the returned short summary into `state.phases[phase]`
+({ status, summary, completed_at }).
+
+- **implement fan-out:** read the manifest at `state.plan.manifest`. Topologically sort
+  `tasks[]` by `depends_on`; for each task with `status !== "done"`, spawn `driver/implement`
+  (foreground) with `{ statePath, planDir, slug, mode: "task", taskId, taskFile, manifestEntry }`.
+  Write the returned commit SHA into `state.plan.tasks[i].commit`. On failure → `question`:
+  retry / mark task skipped / abort.
+- **audit/review round loops:** for `spec-audit` and `code-review`, run rounds
+  `round = 1..maxRounds` where `maxRounds = params.max_rounds ?? 2`:
+  1. spawn the phase (foreground) with `{ statePath, planDir, slug, round }` — it writes
+     `findings` + `verdict` into state;
+  2. if `verdict === "pass"` → break;
+  3. spawn `driver/implement` with `{ statePath, planDir, slug, mode: "fix", round, findings }`;
+  4. re-spawn the phase (next round).
+  After MAX_ROUNDS with verdict still `fail`: record it and ask via `question`:
+  continue to next phase anyway / abort the cycle.
+
+- Skip a phase if `state.phases[phase].status === "done"`, unless `params.force` (handled in step 2).
+- Variant lookup: when spawning phase `p`, if `params.variants[p]` is set, resolve the agent ID
+  through the VARIANTS table below; unknown variant → stop with an error listing known ones.
+- On phase failure: record `status: "failed"` + summary, then `question`: retry / skip / abort.
+- **Plan approval gate:** after `plan` completes, ask the user via `question`:
+  "Plan written to `.plan/<slug>/` — proceed?" with options **Proceed** / **Revise**
+  (re-spawn `driver/plan` with the feedback as input) / **Abort**.
+
+VARIANTS table (maps `--<phase>-variant <name>` to an agent ID; variants keep the same
+output contract). `plan-thorough` is currently a SYMLINK to `plan.md` — a placeholder that
+shows the mechanism, not a real variant (install.sh dereferences it via `cp -RL`; OpenCode
+discovery skips symlinked agent files). To implement a real variant later, replace the
+symlink with an actual `agents/driver/plan-thorough.md` (same output contract, different
+strategy inside):
 
 | phase | variant   | agent ID               |
 |-------|-----------|------------------------|
 | plan  | (default) | `driver/plan`          |
-| plan  | thorough  | `driver/plan-thorough`  <!-- TODO: create when needed; selected via --plan-variant thorough -->
+| plan  | thorough  | `driver/plan-thorough` |
 
-## Run loop (skeleton)
+## 7. Final report
 
-1. Load the `driver-conventions` skill (state.json schema, formats, summary contract).
-2. Parse args → `{ issueOrSpec, phases }`.
-3. Repo root and branch arrive in the prompt (from the command's `!` blocks).
-   Plan dir = `.plan/<ISSUE-ID>/`. **Validate the issue ID against `^[A-Z][A-Z0-9]+-[0-9]+$`
-   BEFORE using it in any path** (path traversal). If the arg is not an issue key, treat it
-   as a raw spec and derive a slug (TODO: decide slug source, e.g. ask user or branch name).
-4. If `state.json` is missing → spawn `driver/preplan` (foreground) with
-   `{ repoRoot, branch, issueOrSpec, planDir, params }`. Otherwise load existing state.
-5. For each requested phase in registry order:
-   - Skip if `state.phases[phase].status === "done"` (resume).
-   - Spawn the phase agent (foreground) with a minimal prompt: state path + its state slice + params.
-   - Collect the short summary → write `state.phases[phase] = { status, summary, completed_at }`.
-   - On failure: record it, then use the `question` tool: retry / skip / abort.
-6. **implement fan-out:** read `manifest.json`; for each task with `status !== "done"`,
-   respecting `depends_on`, spawn `driver/implement` with `{ statePath, planDir, taskFile, taskId }`.
-   Record each commit SHA into `state.plan.tasks[i].commit`.
-7. **audit / review round loops:** spawn the phase → if findings, spawn `driver/implement`
-   scoped to the findings → re-spawn the phase. Bound: `DEFAULT_MAX_ROUNDS = 2`
-   (TODO: `--max-rounds` flag). After the bound, stop and report — do not loop forever.
-8. Final: print a compact cycle report to the user — phases run, commits, verdicts, plan dir.
-
-## TODO (fill in when implementing for real)
-
-- [ ] Exact arg grammar (positional vs flags), and behavior when neither issue nor spec is given.
-- [ ] Slug derivation for non-issue specs.
-- [ ] Whether completed phases can be force-re-run (`--force`?).
-- [ ] How failures mid-cycle are surfaced (state + question tool + final report).
+Print a compact cycle report: slug, branch/worktree, per-phase status, commits (SHAs),
+audit/review/qa verdicts, plan dir path, and any warnings (e.g. `.plan/` not gitignored).

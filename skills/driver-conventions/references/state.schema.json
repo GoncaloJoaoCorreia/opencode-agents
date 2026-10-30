@@ -1,35 +1,52 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "driver state.json",
-  "description": "Single source of truth for one driver cycle, at .plan/<ISSUE-ID>/state.json. Written by preplan, read+updated by every phase. Append/merge only — never delete.",
+  "description": "Single source of truth for one driver cycle, at .plan/<slug>/state.json. Initial skeleton written by the driver, filled by preplan, read+updated by every phase. Append/merge only — never delete.",
   "type": "object",
-  "required": ["version", "issue_id", "repo_root", "plan_dir", "created_at", "params", "phases"],
+  "required": ["version", "issue_id", "repo_root", "plan_dir", "branch", "created_at", "params", "phases"],
   "properties": {
     "version": { "const": 1 },
     "issue_id": {
       "type": "string",
       "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$",
-      "description": "Linear-style key. Validate against the pattern BEFORE using it in any path (path traversal)."
+      "description": "Slug. From a Linear key, or user-chosen. Validate against the pattern BEFORE using it in any path (path traversal)."
     },
     "spec": {
       "type": "object",
       "properties": {
         "source": { "enum": ["linear", "prompt", "file"] },
-        "ref": { "type": "string", "description": "issue key, file path, or short label" },
+        "ref": { "type": "string", "description": "issue key, file path, or slug" },
         "title": { "type": "string" },
-        "url": { "type": "string" }
+        "url": { "type": "string" },
+        "spec_file": { "type": "string", "description": ".plan/<slug>/spec.md when source=prompt" }
       }
     },
-    "repo_root": { "type": "string" },
-    "plan_dir": { "type": "string", "description": "relative plan dir, e.g. .plan/ABC-123" },
+    "repo_root": { "type": "string", "description": "absolute path from git rev-parse --show-toplevel" },
+    "plan_dir": { "type": "string", "description": "repo-root-relative, e.g. .plan/ABC-123" },
+    "branch": { "type": "string", "description": "branch the cycle runs on (feat/<slug> created on protected branches)" },
+    "worktree": {
+      "type": ["object", "null"],
+      "properties": { "directory": { "type": "string" } },
+      "description": "set when --worktree was used"
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
     "created_at": { "type": "string", "format": "date-time" },
     "params": {
       "type": "object",
-      "description": "Driver flags for this run (phases, and future --max-rounds/--qa/--*-variant/...).",
+      "description": "Driver flags for this run.",
       "properties": {
         "phases": {
           "type": "array",
           "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history"] }
+        },
+        "worktree": { "type": "boolean" },
+        "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
+        "qa": { "type": "string", "description": "--qa override for state.qa.command" },
+        "force": { "type": "boolean", "description": "re-run requested phases even if done" },
+        "variants": {
+          "type": "object",
+          "description": "phase -> variant name, e.g. { plan: \"thorough\" }; resolved via the driver's VARIANTS table",
+          "additionalProperties": { "type": "string" }
         }
       },
       "additionalProperties": true
@@ -84,6 +101,7 @@
       "type": "object",
       "properties": {
         "command": { "type": "string" },
+        "candidates": { "type": "array", "items": { "type": "string" } },
         "verdict": { "enum": ["pass", "fail", "skipped"] },
         "exit_code": { "type": "integer" },
         "log": { "type": "string", "description": "path to full log under .plan/, e.g. .plan/ABC-123/qa.log" },
@@ -100,7 +118,8 @@
             "properties": {
               "module": { "type": "string" },
               "history_file": { "type": "string" },
-              "decision_file": { "type": ["string", "null"] }
+              "decision_file": { "type": ["string", "null"] },
+              "commit": { "type": ["string", "null"] }
             }
           }
         }

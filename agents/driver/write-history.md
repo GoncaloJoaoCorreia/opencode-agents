@@ -1,5 +1,5 @@
 ---
-description: Driver phase 7 — append boundary history and decisions to agent/<module>/{history,decisions}.md in the target repo (committed). The only agent allowed to edit agent/**.
+description: Driver phase 7 — append boundary history and decisions to agent/<module>/{history,decisions}.md in the target repo, then commit those changes as a docs commit. The only agent allowed to edit agent/**.
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -10,6 +10,10 @@ permissions:
   - { action: "shell", resource: "*", effect: "ask" }
   - { action: "shell", resource: "git log *", effect: "allow" }
   - { action: "shell", resource: "git show *", effect: "allow" }
+  - { action: "shell", resource: "git status *", effect: "allow" }
+  # This phase commits ONLY agent/ changes (docs commit), per the agreed convention.
+  - { action: "shell", resource: "git add agent/*", effect: "allow" }
+  - { action: "shell", resource: "git commit *", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
@@ -17,37 +21,40 @@ permissions:
 # Phase: write-history
 
 Append this cycle's boundary history and important decisions to the per-module files under
-`agent/`. You may edit ONLY `agent/**` and `.plan/**`. Append — never rewrite existing entries.
+`agent/`, then commit those changes. You may edit ONLY `agent/**` and `.plan/**`. Append —
+never rewrite existing entries.
 
 ## Inputs (from the driver's prompt)
 
-- state.json path (has plan.tasks with commit SHAs, audit/review verdicts, qa verdict)
-- the list of changed files per module (driver derives it, or you derive it via
-  `git show --stat <sha>` per commit)
+- `statePath` (has plan.tasks with commit SHAs, audit/review/qa verdicts, spec)
+- the list of modules touched (driver derives them, or derive via `git show --stat <sha>` per commit)
 
-## Module mapping
+## Module mapping (confirmed default rule)
 
-Follow the rule in `driver-conventions` (TODO: confirm per target repo). Default: module =
-first path segment of changed files under `src/`, else the first segment, else `core`.
+module = first path segment of the changed files under `src/`, else the first segment,
+else `core`.
 
-## Formats (see driver-conventions skill for the exact templates)
+## Steps
 
-- `agent/<module>/history.md` — append:
-  `## <ISO date> — <ISSUE-ID> — <title>` + bullets: what changed, commit SHAs, plan path.
-- `agent/<module>/decisions.md` — append (only for real decisions, sourced from plan risks
-  and audit/review notes):
-  `## <ISO date> — <ISSUE-ID> — <decision>` + Context / Options / Decision / Rationale / Consequences.
-
-Create files and directories if missing.
+1. Load the `driver-conventions` skill (exact entry templates).
+2. Group this cycle's commits (`state.plan.tasks[].commit`) by module via `git show --stat`.
+3. For each module, append to `agent/<module>/history.md`:
+   `## <ISO date> — <ISSUE-ID> — <title>` + bullets: what changed, commit SHAs, plan path.
+   Append to `agent/<module>/decisions.md` ONLY for real decisions (from plan risks and
+   audit/review notes): Context / Options / Decision / Rationale / Consequences.
+   Create files/dirs if missing. One history entry per module per cycle (group the commits).
+4. Commit the history changes: `git add agent/...` (only those paths) then
+   `git commit -m "docs(driver): record history/decisions for <ISSUE-ID>"`.
+   NEVER push. If there is nothing to commit (no entries), skip the commit.
+5. Update `state.json`: `phases["write-history"] = { status: "done", summary }`,
+   `history.entries[] = [{ module, history_file, decision_file, commit }]`, and record the
+   docs commit SHA.
 
 ## Output contract (to the driver)
 
-- `state.phases["write-history"] = { status: "done", summary }`;
-  `state.history.entries[] = [{ module, history_file, decision_file }]`.
-- Short summary: which module files were touched.
+Short summary: module files touched + docs commit SHA (or "nothing to commit").
 
 ## Gotchas
 
-- One history entry per MODULE per cycle, not per commit — group the cycle's commits.
-- Never commit — the human (or a later step) commits `agent/` changes. TODO: decide whether
-  write-history's own changes ride along in a final commit or stay uncommitted for review.
+- If `git commit` fails (e.g. nothing staged), do not force it — report and leave changes uncommitted.
+- Never stage files outside `agent/`.

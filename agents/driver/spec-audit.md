@@ -1,5 +1,5 @@
 ---
-description: Driver phase 4 — verify the implementation against the plan's acceptance criteria. Report-only: the driver spawns driver/implement for repairs.
+description: "Driver phase 4 — verify the implementation (commits in state.plan.tasks) against the plan's acceptance criteria. Report-only: the driver spawns driver/implement for repairs in bounded rounds."
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -18,29 +18,40 @@ permissions:
 
 # Phase: spec-audit
 
-Compare what was implemented (commits recorded in `state.plan.tasks`) against the
-acceptance criteria in `manifest.json` / `tasks/*.md`. You are REPORT-ONLY: never edit
-code — the driver spawns `driver/implement` for each repair round.
+Compare what was implemented (commit SHAs in `state.plan.tasks`) against the acceptance
+criteria in `manifest.json` / `tasks/*.md`. You are REPORT-ONLY: never edit code — the
+driver spawns `driver/implement` for each repair round and re-runs you.
+
+## Inputs (from the driver's prompt)
+
+- `statePath`, `planDir` (`.plan/<slug>`), `slug`, `round` (1-based)
 
 ## Steps
 
 1. Load the `driver-conventions` skill.
-2. For every task and every acceptance criterion:
-   - inspect the code (read/grep, `git show <commit>`) for evidence;
-   - run the criterion's `verification.command` when `type: "command"` (shell approval applies);
-   - record pass/fail + evidence (file:line, short command-output excerpt).
-3. Write structured findings to `state.json` under `audit.rounds[]`:
-   `{ round, findings: [{ task, criterion, status, severity, evidence }] }`.
+2. Read `manifest.json` + all `tasks/*.md` + `plan.md`. For each task and each acceptance
+   criterion:
+   - inspect the code and the task's commit (`git show <sha>`) — verify yourself, never
+     trust the implementer's summary; record evidence (`file:line`, short command output);
+   - if `verification.type === "command"`, run the exact command from the repo root
+     (shell approval applies; use a sensible timeout);
+   - if `verification.type === "manual"`, verify by code inspection and mark it as such.
+   - record `{ id, task, criterion, status: pass|fail, severity, evidence }`.
+     severity: blocker (criterion not met / broken) > major > minor.
+3. Write to `state.json` (merge, never clobber):
+   `state.audit.rounds[round] = { round, findings, verdict }`,
+   `state.audit.verdict = "pass" | "fail"` (fail if any finding with status fail),
+   `phases["spec-audit"] = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)
 
-- `state.phases["spec-audit"] = { status: "done", summary }`; `state.audit.verdict = pass|fail`.
-- Short summary to the driver: pass/fail counts and the failed criterion ids.
-  The driver loops (bounded rounds, default 2 — TODO `--max-rounds`): spawn implement with
-  the findings, then re-spawn you.
+Short summary only: round, pass/fail counts, the failed finding ids (with severity).
+The driver loops: if verdict = fail, it spawns `driver/implement` with the failing findings,
+then re-spawns you, up to MAX_ROUNDS (default 2).
 
 ## Gotchas
 
-- Verify claims yourself — do not trust the implementer's summary; check the actual commits.
-- A criterion with `verification.type: "manual"` is checked by code inspection only; mark
-  it clearly as manually verified.
+- Run verification commands from the repo root; quote paths; never interpolate finding text into shell.
+- A criterion whose command can't run in this environment (missing deps) → status fail with
+  severity blocker and evidence "command could not run: <error>" — don't silently pass it.
+- If a task was skipped (status skipped), mark its criteria as "skipped", not fail.

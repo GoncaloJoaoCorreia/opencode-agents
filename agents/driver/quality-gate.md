@@ -23,8 +23,7 @@ the driver spawns `driver/implement` for repairs.
 ## Steps
 
 1. Load the `driver-conventions` skill.
-2. If `state.qa.command` is missing, ask the driver/user via `question` (or fail fast in
-   non-interactive mode) — do not invent a command.
+2. If `state.qa.command` is missing, ask the user via `question` — do not invent a command.
 3. Run it from the repo root with a generous timeout. Capture exit code and the tail of the
    output.
 4. On failure, extract the actionable failures (failing tests, lint errors, build errors)
@@ -35,8 +34,8 @@ the driver spawns `driver/implement` for repairs.
 ## Output contract (to the driver)
 
 - Short summary: command, verdict, failure count + the most important failure.
-  The driver may run bounded repair rounds via `driver/implement` (TODO `--max-rounds`),
-  then re-spawn you.
+  The driver may run bounded repair rounds: spawn `driver/implement` with the failures
+  (`mode: "fix"`), then re-spawn you, up to `params.max_rounds ?? 2` (params arrive in your prompt).
 
 ## Gotchas
 

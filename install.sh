@@ -8,7 +8,9 @@ DEST="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 
 for d in agents commands skills; do
   mkdir -p "$DEST/$d"
-  cp -R "$SRC/$d/." "$DEST/$d/"
+  # -L dereferences symlinks (e.g. the plan-thorough variant placeholder), so the
+  # installed copy is a real file that stays in sync with its target on re-install.
+  cp -RL "$SRC/$d/." "$DEST/$d/"
   echo "installed $d/ -> $DEST/$d/"
 done
 
