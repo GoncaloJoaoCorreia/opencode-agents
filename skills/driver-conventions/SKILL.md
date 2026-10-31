@@ -17,18 +17,23 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Plan dir is `.plan/<slug>/` at the repo root; `.plan/` is gitignored in the target repo.
 - Dirty tree at start → the driver asks (default: abort).
 - Branch: on `main`/`master`/`develop`/`dev` the driver creates `feat/<slug>`.
+- Final phase `pr` (phase 8, in the default phase list) pushes the cycle branch and
+  opens/updates a PR via the `gh` CLI against the repo's default branch (fallback `main`)
+  — see §7. It is the ONLY phase allowed to push.
 - `--worktree`: the driver creates a git worktree named `<slug>` and moves its session into
   it before spawning any phase.
 - Linear: MCP server `linear-project` (https://mcp.linear.app/mcp), READ-ONLY:
-  `get_issue` / `list_comments` etc. may be called (they ask for approval); all
-  create/update/save/delete tools are denied.
+  `get_issue` / `list_comments` etc. may be called without prompting; all
+  create/update/save/delete tools are hard-denied.
 - Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`, `--force`,
   `--<phase>-variant <name>` — parsed by the driver into `state.params`; on resume, newly
   passed flags win. `--force` re-runs all requested phases even if `done`.
 - LIMITATION: the driver requires an interactive client — the driver and preplan use the
   `question` tool, so headless `opencode run` is not supported.
 - After the plan phase, the driver asks the user to approve the plan before implement runs
-  (Proceed / Revise / Abort).
+  (Proceed / Revise / Abort) — the question surfaces `plan.md`'s `## Assumptions` and open
+  questions so unfounded assumptions get vetoed up front. The plan phase asks clarifying
+  questions eagerly via `question` and never assumes silently.
 
 ## 1. State file — `.plan/<slug>/state.json`
 
@@ -66,7 +71,7 @@ Refs: <ISSUE-ID>
 ```
 
 - Allowed types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`.
-- One commit per task. Stage only the task's `files` globs. Never push. No sign-off required.
+- One commit per task. Stage only the task's `files` globs. Never push (the `pr` phase owns pushing). No sign-off required.
 - write-history's own commit: `docs(driver): record history/decisions for <ISSUE-ID>`,
   staging only `agent/...` paths.
 
@@ -106,8 +111,30 @@ Each phase returns to the driver ONLY: phase name, status, a 3–10 line summary
 
 - Validate slugs before path use; never interpolate untrusted text (issue titles, spec
   bodies) into shell commands or into `!` blocks of command templates.
-- Phases never push; only `driver/implement` commits code, only `driver/write-history`
-  commits `agent/` changes.
+- Only `driver/pr` pushes (PR phase); every other phase never pushes. Only
+  `driver/implement` commits code, only `driver/write-history` commits `agent/` changes.
 - Phases never spawn subagents (nesting depth is 1) — the driver owns all loops and fan-out.
 - The `question` tool works in foreground children; the driver is interactive-only
   (headless `opencode run` is not supported).
+
+## 7. Pull requests (pr phase)
+
+- `driver/pr` (phase 8, default) is the ONLY agent allowed `git push`: it runs
+  `git push -u origin <branch>` (never `--force`) and then opens or updates the PR with
+  the `gh` CLI. If a PR for the head branch already exists, `gh pr edit` it (idempotent
+  resume) — never create a duplicate.
+- Base branch: repo default via `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`,
+  fallback `main`. Head = `state.branch`.
+- Title: conventional-commit style. Reuse the first task-commit subject if it already
+  matches `<type>(<scope>): ...`; otherwise synthesize from the dominant commit
+  type/scope + `state.spec.title` (fallback: the slug). Sanitize/validate before any
+  shell use — never interpolate unvalidated text into a shell command.
+- Body: follow the target repo's PR template when one exists (`.github/PULL_REQUEST_TEMPLATE.md`,
+  `.github/PULL_REQUEST_TEMPLATE/*.md`, `docs/PULL_REQUEST_TEMPLATE.md`, root
+  `PULL_REQUEST_TEMPLATE.md`); keep it SHORT and review-focused — Summary, How to review
+  (riskiest files/commits first), How to verify (`state.qa.command` + audit/review
+  verdicts), Risks & assumptions (from `plan.md`). Write it to `.plan/<slug>/pr-body.md`
+  and pass via `--body-file`.
+- Non-GitHub remote or unauthenticated `gh` → mark the phase `skipped`/`failed` with a
+  clear summary; never push anywhere else.
+- Record `state.pr = { number, url, base, head, title }` in `state.json`.

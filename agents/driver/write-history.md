@@ -7,13 +7,9 @@ permissions:
   - { action: "edit", resource: "*", effect: "deny" }
   - { action: "edit", resource: ".plan/**", effect: "allow" }
   - { action: "edit", resource: "agent/**", effect: "allow" }  # history/decisions only
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git show *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  # This phase commits ONLY agent/ changes (docs commit), per the agreed convention.
-  - { action: "shell", resource: "git add agent/*", effect: "allow" }
-  - { action: "shell", resource: "git commit *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push). This phase commits ONLY agent/ changes (docs commit).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
@@ -45,7 +41,7 @@ else `core`.
    Create files/dirs if missing. One history entry per module per cycle (group the commits).
 4. Commit the history changes: `git add agent/...` (only those paths) then
    `git commit -m "docs(driver): record history/decisions for <ISSUE-ID>"`.
-   NEVER push. If there is nothing to commit (no entries), skip the commit.
+   NEVER push (only the pr phase pushes). If there is nothing to commit (no entries), skip the commit.
 5. Update `state.json`: `phases["write-history"] = { status: "done", summary }`,
    `history.entries[] = [{ module, history_file, decision_file, commit }]`, and record the
    docs commit SHA.

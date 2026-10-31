@@ -6,16 +6,14 @@ permissions:
   - { action: "subagent", resource: "*", effect: "deny" }   # nesting depth 1: the driver owns fan-out
   - { action: "edit", resource: "*", effect: "deny" }
   - { action: "edit", resource: ".plan/**", effect: "allow" } # plans are the only thing this phase writes
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git branch *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   # Linear MCP read-only (server "linear-project"; action names may sanitize "-" to "_").
   # Only needed when state.spec.source = "linear". Write tools stay denied.
-  - { action: "linear-project_*", resource: "*", effect: "ask" }
-  - { action: "linear_project_*", resource: "*", effect: "ask" }
+  - { action: "linear-project_*", resource: "*", effect: "allow" }
+  - { action: "linear_project_*", resource: "*", effect: "allow" }
   - { action: "linear-project_create_*", resource: "*", effect: "deny" }
   - { action: "linear-project_update_*", resource: "*", effect: "deny" }
   - { action: "linear-project_save_*", resource: "*", effect: "deny" }
@@ -49,7 +47,7 @@ permissions:
    commits (`git log`). Use glob/grep/read. Do NOT spawn subagents (denied — depth 1).
 4. **Write the plan artifacts** under `.plan/<slug>/`:
    - `plan.md` — context, approach, task breakdown, risks, acceptance-criteria overview,
-     open questions.
+     open questions, and an explicit `## Assumptions` section (see below).
    - `manifest.json` — per `references/manifest.schema.json`: `tasks[]` with `id`
      (slug `^[a-z0-9]+(-[a-z0-9]+)*$`), `title`, `file`, `depends_on`, `files` (globs),
      `acceptance_criteria[]` each with `verification: { type: "command", command }` or
@@ -68,9 +66,22 @@ permissions:
    { id, title, file, status: "pending" }`, `plan.risks`, and
    `phases.plan = { status: "done", summary, completed_at }`.
 
+## Clarifying questions & assumptions (MANDATORY)
+
+- **Ask eagerly.** You run in the foreground precisely so the `question` tool works.
+  Whenever the spec is ambiguous, underspecified, conflicts with the codebase, or leaves a
+  real choice open (scope, approach, data model, API shape, edge cases, naming), ask via
+  `question` — batch related points into one question set. One question now beats a wrong
+  plan. Do not guess just to avoid asking.
+- **Never make unfounded assumptions.** If a point can't be settled by a question, do NOT
+  silently assume it: record every assumption explicitly in `plan.md` under a
+  clearly-marked `## Assumptions` section — each entry with its rationale and what breaks
+  if it's wrong. The driver surfaces these at the plan-approval gate.
+- The output summary must list the questions you asked and the assumptions you recorded.
+
 ## Output contract (to the driver)
 
-Short summary only: task count + ids, areas touched, risks, open questions.
+Short summary only: task count + ids, areas touched, risks, open questions, assumptions.
 Do NOT return the full plan text — the driver reads state/files if needed.
 
 ## Gotchas
@@ -78,6 +89,6 @@ Do NOT return the full plan text — the driver reads state/files if needed.
 - EXTENSION POINT: if you are a variant agent (e.g. `driver/plan-thorough`, selected via
   `--plan-variant thorough`), keep this EXACT output contract — later phases must not care
   which variant produced the plan.
-- If the spec is ambiguous, ask via `question` (you run in the foreground) — one question
-  now beats a wrong plan.
+- Ask via `question` eagerly (see "Clarifying questions & assumptions") — you run in the
+  foreground for exactly this reason.
 - Write no code. Touch nothing outside `.plan/**`.

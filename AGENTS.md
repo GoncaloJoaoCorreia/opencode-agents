@@ -79,10 +79,14 @@ update the schemas too**, and keep README.md's summary in sync.
   or into `!` blocks of command templates — `!` blocks run outside the permission flow.
   `commands/driver.md`'s `!` blocks are static on purpose.
 - Agent permissions are scoped to `driver` / `driver/*` only; `git push` is denied
-  everywhere. Only `driver/implement` commits code; only `driver/write-history` commits
-  `agent/`. Subagent nesting depth is 1 by default → the driver owns all loops/fan-out;
+  everywhere EXCEPT `driver/pr` (the PR phase owns pushing). Only `driver/implement`
+  commits code; only `driver/write-history` commits `agent/`. Subagent nesting depth is 1 by default → the driver owns all loops/fan-out;
   phases must not spawn subagents and must be spawned in the foreground (`question` tool
   needs an interactive client — headless `opencode run` is NOT supported by the driver).
+- Shell is permissive by default in all driver agents (`shell *: allow`, no prompts).
+  Safety comes from the `deny` rules (push outside `driver/pr`, subagent spawning, edit
+  scopes, Linear writes) plus agent discipline — still never interpolate untrusted text
+  into shell commands.
 - Phase agents deliberately set no `model:` — they inherit the session's model (user picks
   via `/models`).
 - `.plan/` is scratch and gitignored in target repos; `agent/` is committed there.

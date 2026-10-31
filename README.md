@@ -3,7 +3,7 @@
 A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands and skills.
 
 It currently ships one thing: the **driver** — `/driver` runs an entire feature cycle
-(plan → implement → audit → review → QA → history) for you. Each phase runs as its own
+(plan → implement → audit → review → QA → history → PR) for you. Each phase runs as its own
 subagent with a fresh context window, coordinated through a state file, so no single
 conversation ever has to hold the whole cycle.
 
@@ -11,7 +11,7 @@ conversation ever has to hold the whole cycle.
 /driver ABC-123
    │
    ▼
- preplan → plan → implement ×N → spec-audit → code-review → quality-gate → write-history
+ preplan → plan → implement ×N → spec-audit → code-review → quality-gate → write-history → pr
 ```
 
 ## Quick start
@@ -79,6 +79,7 @@ Then, from the repo root:
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs the project's test/lint/build command and records the verdict |
 | write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
+| pr | `/phases/pr` | Pushes the branch and opens/updates a PR against the repo's default branch (`gh`), with a short, review-focused description that follows the repo's PR template when one exists |
 
 Audit and review never edit code — when they find something, the driver sends `implement`
 back with just those findings, in bounded repair rounds. If anything fails, the driver
@@ -116,7 +117,8 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 - **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md`,
   `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`.
 - **Commits** — one per plan task, conventional format with the module as scope
-  (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. The driver never pushes.
+  (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
+final `pr` phase, which pushes the branch and opens the PR.
 - **`agent/<module>/history.md` and `decisions.md`** — committed by the final phase as a
   `docs(driver): ...` commit. Module = first path segment of the changed files under
   `src/` (else first segment, else `core`).
@@ -128,6 +130,11 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
   QA command, retries), so headless `opencode run` is not supported.
 - **Linear is used read-only** (`get_issue`, `list_comments`, …); the driver never comments
   on or updates issues.
+- **The `pr` phase needs the `gh` CLI authenticated** (`gh auth login`) and a GitHub
+  remote; on a non-GitHub remote it skips with a note and you push/open the PR yourself.
+- **Permissions are permissive by default**: shell commands run without allow/deny
+  prompts in all driver agents. Safety comes from the hard `deny` rules (no `git push`
+  outside `driver/pr`, no subagent spawning, edit scoped per phase, Linear writes denied).
 - All phases inherit your session's model/variant (`/models`).
 - Optional: OpenCode's built-in `/goal "<objective>"` can wrap a driver session — the
   driver is idempotent via `state.json`, so repeated goal rounds just resume. (`/goal` is a

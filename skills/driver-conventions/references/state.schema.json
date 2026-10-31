@@ -37,7 +37,7 @@
       "properties": {
         "phases": {
           "type": "array",
-          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history"] }
+          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"] }
         },
         "worktree": { "type": "boolean" },
         "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
@@ -123,6 +123,17 @@
             }
           }
         }
+      }
+    },
+    "pr": {
+      "type": "object",
+      "description": "Filled by the pr phase.",
+      "properties": {
+        "number": { "type": "integer" },
+        "url": { "type": "string" },
+        "base": { "type": "string", "description": "base branch (repo default, fallback main)" },
+        "head": { "type": "string", "description": "head branch (the cycle branch)" },
+        "title": { "type": "string" }
       }
     }
   },

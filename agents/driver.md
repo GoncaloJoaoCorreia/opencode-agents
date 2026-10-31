@@ -1,5 +1,5 @@
 ---
-description: Orchestrates a full feature development cycle (preplan → plan → implement → spec-audit → code-review → quality-gate → write-history) by spawning one driver/* subagent per phase. Primary agent behind the /driver command.
+description: Orchestrates a full feature development cycle (preplan → plan → implement → spec-audit → code-review → quality-gate → write-history → pr) by spawning one driver/* subagent per phase. Primary agent behind the /driver command.
 mode: primary
 # NOTE: no `model:` on purpose — inherits the session's model/variant (user sets it via /models).
 permissions:
@@ -9,14 +9,9 @@ permissions:
   # The driver itself never touches code — only state files under .plan/.
   - { action: "edit", resource: "*", effect: "deny" }
   - { action: "edit", resource: ".plan/**", effect: "allow" }
-  # Shell needs approval, except read-only git inspection and feature-branch creation.
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git diff *", effect: "allow" }
-  - { action: "shell", resource: "git branch *", effect: "allow" }
-  - { action: "shell", resource: "git checkout -b *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (last match wins, so the
+  # deny below still blocks the driver itself from pushing — only driver/pr pushes).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
@@ -109,6 +104,7 @@ If it exists, merge — never clobber.
 | 5 | code-review   | `driver/code-review`   | same round-loop pattern                                       |
 | 6 | quality-gate  | `driver/quality-gate`  | runs state.qa.command                                       |
 | 7 | write-history | `driver/write-history` | appends agent/<module>/*.md AND commits them (docs commit)  |
+| 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR vs the default branch (gh) |
 
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
 `description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,
@@ -137,6 +133,8 @@ params }. Then write the returned short summary into `state.phases[phase]`
 - **Plan approval gate:** after `plan` completes, ask the user via `question`:
   "Plan written to `.plan/<slug>/` — proceed?" with options **Proceed** / **Revise**
   (re-spawn `driver/plan` with the feedback as input) / **Abort**.
+  Include the plan's `## Assumptions` entries and open questions in the question text,
+  so unfounded assumptions get vetoed here, not discovered after implement.
 
 VARIANTS table (maps `--<phase>-variant <name>` to an agent ID; variants keep the same
 output contract). `plan-thorough` is currently a SYMLINK to `plan.md` — a placeholder that
@@ -153,4 +151,5 @@ strategy inside):
 ## 7. Final report
 
 Print a compact cycle report: slug, branch/worktree, per-phase status, commits (SHAs),
-audit/review/qa verdicts, plan dir path, and any warnings (e.g. `.plan/` not gitignored).
+audit/review/qa verdicts, PR URL (`state.pr.url`) when the pr phase ran, plan dir path,
+and any warnings (e.g. `.plan/` not gitignored).

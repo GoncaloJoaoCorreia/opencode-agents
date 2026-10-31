@@ -6,12 +6,9 @@ permissions:
   - { action: "subagent", resource: "*", effect: "deny" }
   - { action: "edit", resource: "*", effect: "deny" }          # report-only; fixes go through implement
   - { action: "edit", resource: ".plan/**", effect: "allow" }  # findings/state only
-  - { action: "shell", resource: "*", effect: "ask" }           # verification commands need approval
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git diff *", effect: "allow" }
-  - { action: "shell", resource: "git show *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
@@ -34,7 +31,7 @@ driver spawns `driver/implement` for each repair round and re-runs you.
    - inspect the code and the task's commit (`git show <sha>`) — verify yourself, never
      trust the implementer's summary; record evidence (`file:line`, short command output);
    - if `verification.type === "command"`, run the exact command from the repo root
-     (shell approval applies; use a sensible timeout);
+     (use a sensible timeout);
    - if `verification.type === "manual"`, verify by code inspection and mark it as such.
    - record `{ id, task, criterion, status: pass|fail, severity, evidence }`.
      severity: blocker (criterion not met / broken) > major > minor.

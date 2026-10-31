@@ -5,14 +5,10 @@ mode: subagent
 permissions:
   - { action: "subagent", resource: "*", effect: "deny" }   # nesting depth 1: the driver owns fan-out
   - { action: "edit", resource: "*", effect: "allow" }        # may edit code (and .plan/** state)
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git diff *", effect: "allow" }
-  - { action: "shell", resource: "git add *", effect: "allow" }
-  - { action: "shell", resource: "git commit *", effect: "allow" }  # the only agent allowed to commit code
-  - { action: "shell", resource: "git push *", effect: "deny" }      # pushing is always the human's job
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push). This agent may commit code; it never pushes.
+  - { action: "shell", resource: "*", effect: "allow" }
+  - { action: "shell", resource: "git push *", effect: "deny" }      # only driver/pr pushes (PR phase)
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
 
@@ -36,7 +32,7 @@ spec-audit / code-review.
 2. Read the task file, the manifest entry, and `plan.md`. Read the code in scope
    (the `files` globs). In fix mode, read each finding's file:line.
 3. Implement. Stay scoped — no drive-by refactors. In fix mode, fix only the listed findings.
-4. Self-verify: run the task's `verification.command`s (shell approval applies).
+4. Self-verify: run the task's `verification.command`s.
    If a failure is caused by another not-yet-done task (`depends_on`), note it and stop —
    do not expand scope.
 5. Commit:

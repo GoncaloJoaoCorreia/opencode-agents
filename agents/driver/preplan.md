@@ -6,18 +6,16 @@ permissions:
   - { action: "subagent", resource: "*", effect: "deny" }   # nesting depth 1: the driver owns fan-out
   - { action: "edit", resource: "*", effect: "deny" }
   - { action: "edit", resource: ".plan/**", effect: "allow" } # this phase only writes under .plan/
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git branch *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   # Linear MCP — server name "linear-project" (https://mcp.linear.app/mcp) in the target
   # repo's opencode.jsonc. Action names sanitize unsupported chars to "_", so cover both
-  # "linear-project_*" and "linear_project_*". READ-ONLY for v1: all calls ask, and the
-  # write tools are hard-denied. Linear is read-only for the driver, permanently.
-  - { action: "linear-project_*", resource: "*", effect: "ask" }
-  - { action: "linear_project_*", resource: "*", effect: "ask" }
+  # "linear-project_*" and "linear_project_*". READ-ONLY: read calls are allowed without
+  # prompting; the write tools are hard-denied. Linear is read-only for the driver, permanently.
+  - { action: "linear-project_*", resource: "*", effect: "allow" }
+  - { action: "linear_project_*", resource: "*", effect: "allow" }
   - { action: "linear-project_create_*", resource: "*", effect: "deny" }
   - { action: "linear-project_update_*", resource: "*", effect: "deny" }
   - { action: "linear-project_save_*", resource: "*", effect: "deny" }

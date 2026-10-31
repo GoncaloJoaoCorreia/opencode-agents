@@ -6,12 +6,9 @@ permissions:
   - { action: "subagent", resource: "*", effect: "deny" }
   - { action: "edit", resource: "*", effect: "deny" }          # report-only; fixes go through implement
   - { action: "edit", resource: ".plan/**", effect: "allow" }  # findings/state only
-  - { action: "shell", resource: "*", effect: "ask" }
-  - { action: "shell", resource: "git rev-parse *", effect: "allow" }
-  - { action: "shell", resource: "git status *", effect: "allow" }
-  - { action: "shell", resource: "git log *", effect: "allow" }
-  - { action: "shell", resource: "git diff *", effect: "allow" }
-  - { action: "shell", resource: "git show *", effect: "allow" }
+  # Permissive by default: shell runs without prompts (the push deny still applies —
+  # only driver/pr may push).
+  - { action: "shell", resource: "*", effect: "allow" }
   - { action: "shell", resource: "git push *", effect: "deny" }
   - { action: "skill", resource: "driver-conventions", effect: "allow" }
 ---
