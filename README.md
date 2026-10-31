@@ -1,24 +1,43 @@
 # opencode-agents
 
+[![license](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
+
 A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands and skills.
 
-It currently ships one thing: the **driver** — `/driver` runs an entire feature cycle
-(plan → implement → audit → review → QA → history → PR) for you. Each phase runs as its own
-subagent with a fresh context window, coordinated through a state file, so no single
-conversation ever has to hold the whole cycle.
+It currently ships one thing: the **driver** — `/driver` runs an entire feature cycle for
+you. Each phase runs as its own subagent with a fresh context window, coordinated through a
+state file, so no single conversation ever has to hold the whole cycle.
 
+```mermaid
+flowchart LR
+    DRV["/driver ABC-123"] --> PRE[preplan] --> PLAN[plan] --> IMP["implement ×N"]
+    IMP --> AUD[spec-audit] --> REV[code-review] --> QA[quality-gate]
+    QA --> HIST[write-history] --> PR[pr]
+    AUD -. "repair round" .-> IMP
+    REV -. "repair round" .-> IMP
+    QA  -. "repair round" .-> IMP
+
+    style DRV fill:#e1f5fe,stroke:#01579b,stroke-width:2px
 ```
-/driver ABC-123
-   │
-   ▼
- preplan → plan → implement ×N → spec-audit → code-review → quality-gate → write-history → pr
-```
+
+## Contents
+
+- [Quick start](#quick-start)
+- [What a run does](#what-a-run-does)
+- [Usage](#usage)
+- [What lands in your repo](#what-lands-in-your-repo)
+- [Requirements & limitations](#requirements--limitations)
+- [Hacking on this library](#hacking-on-this-library)
 
 ## Quick start
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/GoncaloJoaoCorreia/opencode-agents/main/install.sh | sh
 ```
+
+> [!TIP]
+> The final `pr` phase needs an authenticated `gh` CLI (`gh auth login`) to push the branch
+> and open the PR for you — see step 4 below.
 
 The installer downloads the latest GitHub release payload (`opencode-agents.tar.gz`),
 verifies it against the release's `SHA256SUMS`, and installs `agents/`, `commands/`,
@@ -29,7 +48,8 @@ Working in a local checkout of this repo? Run `./install.sh` there instead — i
 checkout and installs straight from source (same copy-based install; nothing is built).
 Re-run it after pulling changes.
 
-### Install details
+<details>
+<summary><b>Install details</b></summary>
 
 - **Latest release only.** Each install stamps `opencode-agents.version` and writes
   `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
@@ -42,6 +62,8 @@ Re-run it after pulling changes.
 - **Public repo, no auth needed** — the one-liner above and the release downloads work
   unauthenticated.
 
+</details>
+
 Before your first run, in the repo you want to work on:
 
 1. Configure the Linear MCP server in that repo's `opencode.jsonc` (the driver reads issues
@@ -53,6 +75,9 @@ Before your first run, in the repo you want to work on:
 
 2. Add `.plan/` to that repo's `.gitignore` (ready-made line in `snippets/gitignore.txt`).
 3. Pick a model (and variant) with `/models` — all driver phases inherit your session model.
+4. Authenticate the `gh` CLI (`gh auth login`) — the `pr` phase needs it to push the branch
+   and open/update the PR on a GitHub remote. Without it (or on a non-GitHub remote) that
+   phase skips with a note and you push/open the PR yourself.
 
 Then, from the repo root:
 
