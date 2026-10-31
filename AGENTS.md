@@ -15,11 +15,10 @@ lint, or CI here; this repo is pure config/markdown plus `install.sh`.
   here** — OpenCode reloads config automatically, no restart.
 - **Release assets convention:** each GitHub release carries exactly `opencode-agents.tar.gz`
   (one top-level `opencode-agents/` dir with `agents/ commands/ skills/ snippets/
-  install.sh LICENSE`) and `SHA256SUMS` (sha256sum format). The installer fetches them from
-  `releases/latest/download/` (public repo) or via the API/`gh` with a token (private repo
-  — currently private). **Releases are cut by the Release workflow (see Releases below),
-  which builds and uploads these assets** — don't hand-upload them; v0.1 was seeded manually
-  before the workflow existed.
+  install.sh LICENSE`) and `SHA256SUMS` (sha256sum format). The installer fetches them
+  unauthenticated from `releases/latest/download/` (the repo is public). **Releases are cut
+  by the Release workflow (see Releases below), which builds and uploads these assets** —
+  don't hand-upload them; v0.1 was seeded manually before the workflow existed.
 - Each install writes `opencode-agents.version` + `opencode-agents.manifest` into the
   config dir; the manifest drives stale-file cleanup on reinstall. Installs only touch
   `agents/ commands/ skills/` + those two meta files.

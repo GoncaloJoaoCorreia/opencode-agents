@@ -134,36 +134,16 @@ release_mode() {
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT INT TERM
 
-  # Public repo: plain download URLs work unauthenticated.
-  # Private repo: those URLs 404, so fall back to `gh` (authenticated) via the API.
-  if curl -fsSL "$RELEASE_BASE/opencode-agents.tar.gz" -o "$TMP/opencode-agents.tar.gz" 2>/dev/null \
-     && curl -fsSL "$RELEASE_BASE/SHA256SUMS" -o "$TMP/SHA256SUMS" 2>/dev/null; then
-    echo "downloaded latest release payload from $RELEASE_BASE"
-    version=$(curl -fsSL "$API_LATEST" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
-    [ -n "$version" ] || version="latest"
-  elif command -v gh >/dev/null 2>&1; then
-    echo "release download URLs need auth (private repo?) — using gh ..."
-    # Resolve a token explicitly and export it: gh's own credential lookup can fail in
-    # non-interactive contexts even when `gh auth token` works (e.g. keyring-backed auth).
-    if [ -z "${GH_TOKEN:-}" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
-      GH_TOKEN=$(gh auth token 2>/dev/null || true)
-      [ -n "$GH_TOKEN" ] && export GH_TOKEN
-    fi
-    version=$(gh api "repos/$REPO/releases/latest" --jq '.tag_name' 2>/dev/null || true)
-    if [ -z "$version" ]; then
-      echo "install.sh: could not resolve the latest release of $REPO via gh" >&2
-      exit 1
-    fi
-    # shellcheck disable=SC2086
-    gh release download "$version" --repo "$REPO" --dir "$TMP" \
-      --pattern opencode-agents.tar.gz --pattern SHA256SUMS \
-      || { echo "install.sh: release $version has no opencode-agents.tar.gz/SHA256SUMS assets attached" >&2; exit 1; }
-  else
-    echo "install.sh: could not download the release payload." >&2
-    echo "  The repo may be private — either make $REPO public, or install/authenticate gh" >&2
-    echo "  (or set GH_TOKEN/GITHUB_TOKEN) and re-run." >&2
+  # Public repo: the plain download URLs work unauthenticated — no gh/token needed.
+  if ! curl -fsSL "$RELEASE_BASE/opencode-agents.tar.gz" -o "$TMP/opencode-agents.tar.gz" 2>/dev/null \
+     || ! curl -fsSL "$RELEASE_BASE/SHA256SUMS" -o "$TMP/SHA256SUMS" 2>/dev/null; then
+    echo "install.sh: could not download the latest release payload from $RELEASE_BASE" >&2
+    echo "  (no release published yet, or a network problem) — see https://github.com/$REPO/releases" >&2
     exit 1
   fi
+  echo "downloaded latest release payload from $RELEASE_BASE"
+  version=$(curl -fsSL "$API_LATEST" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
+  [ -n "$version" ] || version="latest"
 
   echo "verifying checksum ..."
   # shellcheck disable=SC2086  # SHA_CHECK intentionally unquoted (two words)

@@ -39,16 +39,8 @@ Re-run it after pulling changes.
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
   auto-incremented from the latest, validated repo, checksummed assets attached).
-- **The repo is currently private**, so the plain one-liner needs the repo to be public.
-  While private, fetch the installer through the API with a token instead:
-
-  ```sh
-  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" \
-    https://api.github.com/repos/GoncaloJoaoCorreia/opencode-agents/contents/install.sh | sh
-  ```
-
-  (The installer then downloads the release payload via the GitHub API using the same
-  token, or via `gh` if authenticated.)
+- **Public repo, no auth needed** — the one-liner above and the release downloads work
+  unauthenticated.
 
 Before your first run, in the repo you want to work on:
 
