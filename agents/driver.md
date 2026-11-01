@@ -40,7 +40,7 @@ The `/driver` command template supplies the raw arguments plus repo root, branch
 dirty-file list. Grammar:
 
 ```
-/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--<phase>-variant <name>]
+/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--draft] [--<phase>-variant <name>]
 ```
 
 - First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]+-[0-9]+$`) or a raw
@@ -51,6 +51,8 @@ dirty-file list. Grammar:
 - `--qa "cmd"`: pin the QA command — preplan stores it in `state.qa.command` without
   detecting/asking.
 - `--force`: re-run the requested phases even if already `done` (bare flag = all requested).
+- `--draft`: open the PR as a draft — stored as `params.draft`; the pr phase maps it to
+  `gh pr create --draft`.
 - `--<phase>-variant <name>`: e.g. `--plan-variant thorough` → `params.variants.plan` →
   VARIANTS table lookup below.
 - Unknown flag or missing positional → stop and report; do not guess.
@@ -102,7 +104,7 @@ If it exists, merge — never clobber.
 | 3 | implement     | `driver/implement`     | YOU fan out once per manifest task, sequentially              |
 | 4 | spec-audit    | `driver/spec-audit`    | report-only; YOU run bounded repair rounds via implement      |
 | 5 | code-review   | `driver/code-review`   | same round-loop pattern                                       |
-| 6 | quality-gate  | `driver/quality-gate`  | runs state.qa.command                                       |
+| 6 | quality-gate  | `driver/quality-gate`  | runs state.qa.command; YOU run bounded repair rounds via implement (failures) |
 | 7 | write-history | `driver/write-history` | appends agent/<module>/*.md AND commits them (docs commit)  |
 | 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR vs the default branch (gh) |
 
@@ -116,15 +118,18 @@ params }. Then write the returned short summary into `state.phases[phase]`
   (foreground) with `{ statePath, planDir, slug, mode: "task", taskId, taskFile, manifestEntry }`.
   Write the returned commit SHA into `state.plan.tasks[i].commit`. On failure → `question`:
   retry / mark task skipped / abort.
-- **audit/review round loops:** for `spec-audit` and `code-review`, run rounds
-  `round = 1..maxRounds` where `maxRounds = params.max_rounds ?? 2`:
+- **audit/review/qa round loops:** for `spec-audit`, `code-review`, and `quality-gate`, run
+  rounds `round = 1..maxRounds` where `maxRounds = params.max_rounds ?? 2`:
   1. spawn the phase (foreground) with `{ statePath, planDir, slug, round }` — it writes
-     `findings` + `verdict` into state;
+     `findings`/`failures` + `verdict` into state;
   2. if `verdict === "pass"` → break;
-  3. spawn `driver/implement` with `{ statePath, planDir, slug, mode: "fix", round, findings }`;
+  3. spawn `driver/implement` with `{ statePath, planDir, slug, mode: "fix", round, findings }`
+     — for quality-gate pass `failures: state.qa.failures` instead of `findings`;
   4. re-spawn the phase (next round).
   After MAX_ROUNDS with verdict still `fail`: record it and ask via `question`:
   continue to next phase anyway / abort the cycle.
+  Verdict rule (all three phases, identical): `fail` iff a blocker/major finding failed;
+  minor/nit failures are warnings and do not fail the round (see driver-conventions §5).
 
 - Skip a phase if `state.phases[phase].status === "done"`, unless `params.force` (handled in step 2).
 - Variant lookup: when spawning phase `p`, if `params.variants[p]` is set, resolve the agent ID

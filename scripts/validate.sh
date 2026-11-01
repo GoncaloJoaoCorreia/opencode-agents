@@ -80,6 +80,43 @@ Dir.glob("agents/driver/*.md").each do |f|
   failures << "agents/driver.md registry does not mention driver/#{name}" unless driver_md.include?("driver/#{name}")
 end
 
+# content invariants across agents/ + the conventions skill
+SLUG_RE = '^[A-Z][A-Z0-9]+-[0-9]+$'
+content_files = Dir.glob("agents/**/*.md") + Dir.glob("skills/driver-conventions/**/*.md")
+content_files.each do |f|
+  src = File.read(f)
+  # invariant 1: every phase loads the conventions skill
+  if f.start_with?("agents/driver") && !src.include?("driver-conventions")
+    failures << "#{f}: does not reference the driver-conventions skill"
+  end
+  # invariant 2: any file that builds .plan/ paths must carry the slug regex
+  if src.include?(".plan/<") && !src.include?(SLUG_RE)
+    failures << "#{f}: uses .plan/<slug> paths but does not state the slug regex #{SLUG_RE}"
+  end
+end
+
+# invariant 3: every phase denies `git push *` except pr.md (which must not deny it)
+Dir.glob("agents/driver/*.md").each do |f|
+  next if File.symlink?(f)
+  src = File.read(f)
+  push_deny = src.include?('"git push *"') && src.match?(/git push \*.*deny|deny.*git push \*/m)
+  if File.basename(f) == "pr.md"
+    failures << "#{f}: pr.md must NOT deny 'git push *' (it is the only phase allowed to push)" if push_deny
+  else
+    failures << "#{f}: missing deny rule for 'git push *'" unless push_deny
+  end
+end
+
+# invariant 4: the Linear MCP permission block is identical in preplan.md and plan.md
+linear_lines = lambda do |f|
+  File.readlines(f).select { |l| l =~ /linear[-_]project/ && l.strip.start_with?("- {") }
+end
+preplan_lin = linear_lines.call("agents/driver/preplan.md")
+plan_lin = linear_lines.call("agents/driver/plan.md")
+if preplan_lin.empty? || plan_lin.empty? || preplan_lin != plan_lin
+  failures << "agents/driver/preplan.md and agents/driver/plan.md: linear-project permission blocks differ (or missing) — keep them byte-identical"
+end
+
 if failures.empty?
   puts "ok: #{md_files.size} markdown files, schemas, cross-references all valid"
 else

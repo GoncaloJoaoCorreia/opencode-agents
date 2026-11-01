@@ -48,6 +48,8 @@ phase allowed to push — every other agent hard-denies `git push *`.
      short = `state.spec.title` truncated to ~60 chars (default: the slug).
    - Sanitize before any shell use: strip newlines/quotes; allow only
      `[A-Za-z0-9 .,:;()/+_!-]`; otherwise fall back to the slug as the whole title.
+     Cap the FINAL title at 72 chars (truncate the synthesized subject if needed) — GitHub
+     truncates longer titles in the UI anyway.
      Never interpolate unvalidated text into a shell command.
 8. **Body — SHORT and review-focused:**
    - Template: check the target repo for `.github/PULL_REQUEST_TEMPLATE.md`,
@@ -62,9 +64,11 @@ phase allowed to push — every other agent hard-denies `git push *`.
    - Write the body to `.plan/<slug>/pr-body.md` and pass it via `--body-file`
      (never inline untrusted text in a shell command).
    - Create: `gh pr create --base <base> --head <head> --title "<title>" --body-file .plan/<slug>/pr-body.md`
+     — add `--draft` when `params.draft` is true.
      Update existing: `gh pr edit <n> --title "<title>" --body-file .plan/<slug>/pr-body.md`
+     (an existing draft stays a draft on edit; `--draft` only matters at create time).
    - Get the URL: `gh pr view <n-or-head> --json url -q .url`.
-9. Merge into `state.json` (never clobber): `pr = { number, url, base, head, title }`,
+9. Merge into `state.json` (never clobber): `pr = { number, url, base, head, title, draft: params.draft === true }`,
    `phases.pr = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)

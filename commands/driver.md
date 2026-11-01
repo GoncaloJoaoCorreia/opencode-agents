@@ -1,11 +1,11 @@
 ---
-description: "Drive a full feature development cycle — /driver <ISSUE-KEY-OR-SPEC> [--phases ...] [--worktree] [--max-rounds N] [--qa \"cmd\"] [--force] [--<phase>-variant <name>]"
+description: "Drive a full feature development cycle — /driver <ISSUE-KEY-OR-SPEC> [--phases ...] [--worktree] [--max-rounds N] [--qa \"cmd\"] [--force] [--draft] [--<phase>-variant <name>]"
 agent: driver
 ---
 
 Run the driver cycle.
 
-Usage: /driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--<phase>-variant <name>]
+Usage: /driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--draft] [--<phase>-variant <name>]
 
 Arguments: $ARGUMENTS
 

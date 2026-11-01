@@ -47,8 +47,9 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
    - Call the Linear MCP tools (`linear-project_get_issue` with `id` = the key,
      `format: "markdown"`; then `linear-project_list_comments` with the returned issue id).
      Check your actual tool list — names are `<server>_<tool>`.
-   - If the issue is not found or the server is unreachable, ask via `question`:
-     treat the key as a plain slug, or paste the spec?
+   - If the issue is not found or the server is unreachable, record WHY first —
+     `state.spec.error = "issue not found"` or `"linear server unreachable: <error>"` —
+     then ask via `question`: treat the key as a plain slug, or paste the spec?
    - Record `state.spec = { source: "linear", ref: <key>, title, url }`. Keep any excerpt SHORT —
      the full description stays in Linear; later phases re-fetch what they need.
    - Else, if `issueOrSpec` is a path to an existing file: read it,
@@ -59,13 +60,18 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
 3. **QA command** (only if `"quality-gate"` is in `params.phases`):
    - If `params.qa` is set (driver `--qa "cmd"`): use it directly — `state.qa.command = params.qa`,
      skip detection and the question.
+   - Else if `state.qa.command` already exists (resume) and `params.force` is NOT set: keep the
+     stored command — skip detection and the question. Only re-ask when forced or when missing.
    - Else detect candidates read-only: `package.json` scripts (`test`, `check`, `lint`,
      `typecheck`), `Makefile` (`test`/`check` targets), `.github/workflows/*.yml` test steps.
    - Ask via `question` to confirm: options = detected candidates + "skip quality-gate" + free-form.
-     Store the choice in `state.qa.command` (and `state.qa.candidates`).
+     Store the choice in `state.qa.command` (and `state.qa.candidates`). Choosing
+     "skip quality-gate" also sets `phases["quality-gate"].status = "skipped"` immediately,
+     so the driver does not have to infer it.
 4. **`.gitignore` check:** read the repo-root `.gitignore`. If it has no `.plan/` entry, append
    `".plan/ is not gitignored in this repo — add it (see the driver's snippets/gitignore.txt)"`
-   to `state.warnings`. You may NOT edit files outside `.plan/**`.
+   to `state.warnings` — but ONLY if that exact string is not already present (dedupe on re-runs).
+   You may NOT edit files outside `.plan/**`.
 5. Merge everything into `state.json` (never clobber existing fields):
    `spec`, `qa`, `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`.
 

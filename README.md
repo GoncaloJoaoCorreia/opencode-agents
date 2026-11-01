@@ -94,14 +94,17 @@ Then, from the repo root:
 | implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope) |
 | spec-audit | `/phases/spec-audit` | Verifies every acceptance criterion against the actual code/commits (runs the plan's verification commands) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
-| quality-gate | `/phases/quality-gate` | Runs the project's test/lint/build command and records the verdict |
+| quality-gate | `/phases/quality-gate` | Runs the project's test/lint/build command, records the verdict, and feeds failures back into repair rounds |
 | write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR against the repo's default branch (`gh`), with a short, review-focused description that follows the repo's PR template when one exists |
 
-Audit and review never edit code — when they find something, the driver sends `implement`
-back with just those findings, in bounded repair rounds. If anything fails, the driver
-asks you whether to retry, skip, or abort. Re-running `/driver` resumes from
-`.plan/<slug>/state.json` instead of starting over.
+Audit, review, and quality-gate never edit code — when they find something, the driver
+sends `implement` back with just those findings/failures, in bounded repair rounds
+(`--max-rounds`, default 2). A round's verdict fails only on blocker/major findings;
+minor/nit findings are recorded as warnings. If anything still fails after the max rounds,
+the driver asks you whether to continue anyway or abort; a phase that errors out prompts
+retry/skip/abort. Re-running `/driver` resumes from `.plan/<slug>/state.json` instead of
+starting over.
 
 Pre-flight: you must be in a git repo (the session moves to the repo root if needed); a
 dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver creates a
@@ -116,6 +119,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 /driver ABC-123 --worktree                       # whole cycle inside a new git worktree named ABC-123
 /driver ABC-123 --max-rounds 3 --qa "npm test"   # cap repair rounds, pin the QA command
 /driver ABC-123 --force                          # re-run the requested phases even if already done
+/driver ABC-123 --draft                          # open the PR as a draft
 /driver ABC-123 --plan-variant thorough          # use a variant implementation of a phase
 /phases/spec-audit ABC-123                       # run a single phase standalone
 ```
@@ -127,12 +131,14 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 | `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
 | `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |
 | `--force` | Re-run the requested phases even if marked done |
+| `--draft` | Open the PR as a draft (`pr` phase) |
 | `--<phase>-variant <name>` | Swap in a variant implementation of a phase |
 
 ## What lands in your repo
 
 - **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md`,
-  `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`.
+  `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`, `audit-round-<n>.md` (audit evidence),
+  `pr-body.md` (PR description draft).
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
 final `pr` phase, which pushes the branch and opens the PR.

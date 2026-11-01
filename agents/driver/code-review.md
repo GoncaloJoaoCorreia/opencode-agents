@@ -35,18 +35,32 @@ reporting it. You are REPORT-ONLY: the driver spawns `driver/implement` for fixe
    unverifiable ones.
 4. Prioritize: `blocker` (must fix) > `major` > `minor` > `nit`.
    Finding shape: `{ id, commit, severity, file, line, title, detail, suggested_fix }`.
-5. Write to `state.json` (merge, never clobber):
+   Finding ids are stable across rounds: `R<round>-F<n>` (e.g. `R2-F1`), so fix-mode
+   implement spawns and later re-verification can reference them.
+5. **Round > 1 semantics:** re-verify every finding from the previous rounds against the
+   current code — mark each `fixed` or `still failing` (do NOT re-report fixed ones as new).
+   Then review the NEW commits since the last round (fix commits) and report only genuinely
+   new findings, with fresh `R<round>-F<n>` ids.
+6. **Assumptions check:** read `plan.md`'s `## Assumptions` (and `state.plan.assumptions[]`)
+   — was any assumption invalidated by the implementation? If yes, add a `major` finding
+   ("assumption X no longer holds: ...") so the plan gets corrected, not just the code.
+7. Write to `state.json` (merge, never clobber):
    `state.review.rounds[round] = { round, findings, verdict }`,
-   `state.review.verdict = "pass" | "fail"` — fail if any blocker or major,
+   `state.review.verdict = "pass" | "fail"` — fail iff any finding has severity `blocker`
+   or `major`; `minor`/`nit` are recorded as warnings (surfaced in the summary) and do NOT
+   fail the round (same rule as spec-audit, see driver-conventions §5),
    `phases["code-review"] = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)
 
-Short summary only: round, counts per severity, blocker/major finding ids.
-The driver loops: if verdict = fail, it spawns `driver/implement` with the findings,
-then re-spawns you, up to MAX_ROUNDS (default 2).
+Short summary only: round, counts per severity, the blocker/major finding ids (these set
+verdict=fail), any minor/nit warnings, and prior-round findings now fixed.
+The driver loops: if verdict = fail, it spawns `driver/implement` with the blocker/major
+findings, then re-spawns you, up to MAX_ROUNDS (default 2).
 
 ## Gotchas
 
 - Match the repo's existing conventions; don't report style nits as majors.
-- Don't re-report findings already fixed in a later commit of the same cycle.
+- Don't re-report findings already fixed in a later commit of the same cycle (mark them
+  `fixed` instead — see step 5).
+- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.

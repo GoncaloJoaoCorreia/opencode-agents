@@ -61,10 +61,24 @@ permissions:
    - Prefer `verification.type: "command"` with the exact command (e.g. `npm test -- auth`),
      so spec-audit can execute it.
    - Scope `files` globs tightly — implement stages only those.
-   - Keep the task count sane (typically 1–6); split by module/layer, not by file count.
-5. Update `state.json` (merge, never clobber): `plan.manifest`, `plan.tasks[] =
-   { id, title, file, status: "pending" }`, `plan.risks`, and
-   `phases.plan = { status: "done", summary, completed_at }`.
+   - **Bias toward FEWER tasks.** Start from ONE task covering the whole spec and split
+     only when a piece is genuinely separable: a different module/layer, or a dependency
+     that forces ordering via `depends_on`. Splitting by file count, by step within one
+     change, or "for clarity" is NOT a valid reason: a single task may touch many files.
+     Typical range 1-3; if you exceed 4, justify each split in one line in `plan.md`
+     (why it must be its own independently committable change).
+5. **Validate the manifest before touching state:** parse `manifest.json` as JSON and check,
+   per `references/manifest.schema.json`: required top-level fields (`issue_id`, `title`,
+   `tasks`); each task has `id` matching `^[a-z0-9]+(-[a-z0-9]+)*$`, `title`, `file`,
+   `acceptance_criteria[]`; each criterion has `id`, `text`, and a `verification` whose `type`
+   is `command` (with `command`) or `manual` (with `instructions`); every `depends_on` entry
+   references an existing task `id` (no dangling refs, no cycles). Fix the manifest and
+   re-validate until clean — a malformed manifest poisons the implement fan-out.
+6. Update `state.json` (merge, never clobber): `plan.manifest`, `plan.tasks[] =
+   { id, title, file, status: "pending" }`, `plan.risks`, `plan.assumptions[]` and
+   `plan.open_questions[]` (string mirrors of the `## Assumptions` section and open questions
+   in `plan.md`, so the driver's approval gate can surface them without reading the file),
+   and `phases.plan = { status: "done", summary, completed_at }`.
 
 ## Clarifying questions & assumptions (MANDATORY)
 
@@ -81,7 +95,8 @@ permissions:
 
 ## Output contract (to the driver)
 
-Short summary only: task count + ids, areas touched, risks, open questions, assumptions.
+Short summary only: task count + ids (with a one-line split rationale for every task beyond
+the first), areas touched, risks, open questions, assumptions.
 Do NOT return the full plan text — the driver reads state/files if needed.
 
 ## Gotchas
@@ -91,4 +106,5 @@ Do NOT return the full plan text — the driver reads state/files if needed.
   which variant produced the plan.
 - Ask via `question` eagerly (see "Clarifying questions & assumptions") — you run in the
   foreground for exactly this reason.
+- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.
 - Write no code. Touch nothing outside `.plan/**`.

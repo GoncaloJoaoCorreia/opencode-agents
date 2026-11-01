@@ -38,6 +38,10 @@ spec-audit / code-review.
 5. Commit:
    - Check `git status --porcelain` first. If unrelated changes exist, stage ONLY the task's
      files (expand the manifest `files` globs); never `git add -A` / `git add .`.
+   - **Overlap guard:** if an unrelated UNCOMMITTED change touches the same file as the task's
+     files, you cannot split hunks safely — STOP and report the overlap (file + what blocks
+     you) instead of committing a partial hunk. The driver decides (rebase/clean tree, or
+     skip the task). Never commit someone else's uncommitted work into your task commit.
    - Message per conventions: `<type>(<module>): <subject>` + body + trailers
      `Driver-Task: <task-id>` and `Refs: <slug>`. Module = first path segment of the changed
      files under `src/`, else first segment, else `core` (same rule as history).
@@ -51,7 +55,10 @@ spec-audit / code-review.
   - task mode: `plan.tasks[<id>] = { status: "done", commit: <sha> }`
   - fix mode: append to `state.audit.fixes[]` / `state.review.fixes[] =
     { round, commit, finding_ids: [...] }`
-  - `phases.implement` gets one appended entry per spawn.
+  - append ONE entry per spawn to `state.implement.runs[] =
+    { mode: "task"|"fix", task_id?, round?, commit: <sha>, summary, at }` —
+    `phases.implement` stays a single aggregate `{ status, summary, ... }` entry, do NOT
+    append per-spawn entries to it.
 - Return a SHORT summary: task id or finding ids, commit SHA, files changed, verification
   results, anything noteworthy.
 
@@ -59,4 +66,5 @@ spec-audit / code-review.
 
 - If `git commit` fails (nothing staged, missing identity), report the exact error — don't retry blindly.
 - If verification fails and the fix belongs to another task, stop and report; the driver decides.
+- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
 - Do not modify `.plan/**` beyond the state updates above — plans are the plan phase's artifact.

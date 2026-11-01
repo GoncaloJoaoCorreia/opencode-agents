@@ -16,28 +16,34 @@ permissions:
 # Phase: quality-gate
 
 Run the project's validation and record the verdict. The command comes from
-`state.qa.command` (detected in preplan, or a future `--qa` flag). You never edit code —
-the driver spawns `driver/implement` for repairs.
+`state.qa.command` (detected in preplan, or pinned via the driver's `--qa "cmd"` flag).
+You never edit code — the driver spawns `driver/implement` for repairs in bounded rounds.
 
 ## Steps
 
 1. Load the `driver-conventions` skill.
-2. If `state.qa.command` is missing, ask the user via `question` — do not invent a command.
+2. If `state.qa.command` is missing: ask the user via `question` — do not invent a command.
+   If no interactive client is available (question cannot be answered), mark the phase
+   `skipped` with summary "no qa.command and no interactive client to ask — skipped"
+   instead of blocking the cycle.
 3. Run it from the repo root with a generous timeout. Capture exit code and the tail of the
    output.
 4. On failure, extract the actionable failures (failing tests, lint errors, build errors)
-   into `state.qa.failures[]` with file references where available.
-5. Write `state.qa = { command, verdict, exit_code, log_excerpt, failures }` and
-   `state.phases["quality-gate"] = { status: "done", summary }`.
+   into `state.qa.failures[]` in the schema shape `{ title, file?, line?, excerpt }`.
+5. Write `state.qa = { command, verdict, exit_code, log, log_excerpt, failures }` — `log` is
+   the PATH to the full log (`.plan/<slug>/qa.log`), `log_excerpt` the short tail kept inline —
+   and `state.phases["quality-gate"] = { status: "done", summary }`.
 
 ## Output contract (to the driver)
 
 - Short summary: command, verdict, failure count + the most important failure.
-  The driver may run bounded repair rounds: spawn `driver/implement` with the failures
-  (`mode: "fix"`), then re-spawn you, up to `params.max_rounds ?? 2` (params arrive in your prompt).
+  The driver runs bounded repair rounds (same loop as spec-audit/code-review): spawn
+  `driver/implement` with `failures: state.qa.failures` (`mode: "fix"`), then re-spawn you,
+  up to `params.max_rounds ?? 2` (params arrive in your prompt).
 
 ## Gotchas
 
 - Use a timeout suited to the project; prefer the repo's own CI command if detectable.
 - Keep `log_excerpt` short (tail only) — full logs blow up context; write the full log to
-  `.plan/<ID>/qa.log` instead and reference it.
+  `.plan/<slug>/qa.log`, store its path in `state.qa.log`, and reference it.
+- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.

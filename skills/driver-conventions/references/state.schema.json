@@ -4,6 +4,18 @@
   "description": "Single source of truth for one driver cycle, at .plan/<slug>/state.json. Initial skeleton written by the driver, filled by preplan, read+updated by every phase. Append/merge only — never delete.",
   "type": "object",
   "required": ["version", "issue_id", "repo_root", "plan_dir", "branch", "created_at", "params", "phases"],
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "description": "shared finding shape for audit/review rounds",
+      "properties": {
+        "id": { "type": "string", "description": "stable id, e.g. R1-F3 (round + sequence)" },
+        "status": { "enum": ["pass", "fail", "skipped"] },
+        "severity": { "enum": ["blocker", "major", "minor", "nit"] },
+        "evidence_ref": { "type": "string", "description": "path to the full evidence file under .plan/ (never inline evidence in state)" }
+      }
+    }
+  },
   "properties": {
     "version": { "const": 1 },
     "issue_id": {
@@ -43,6 +55,7 @@
         "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
         "qa": { "type": "string", "description": "--qa override for state.qa.command" },
         "force": { "type": "boolean", "description": "re-run requested phases even if done" },
+        "draft": { "type": "boolean", "description": "--draft: open the PR as a draft (pr phase)" },
         "variants": {
           "type": "object",
           "description": "phase -> variant name, e.g. { plan: \"thorough\" }; resolved via the driver's VARIANTS table",
@@ -67,6 +80,16 @@
       "type": "object",
       "properties": {
         "manifest": { "type": "string", "description": "path to manifest.json" },
+        "assumptions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "explicit assumptions recorded by the plan phase (mirror of plan.md ## Assumptions); surfaced at the driver's plan-approval gate"
+        },
+        "open_questions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "open questions from the plan phase (mirror of plan.md); listed in the phase summary"
+        },
         "tasks": {
           "type": "array",
           "items": {
@@ -83,18 +106,90 @@
         }
       }
     },
+    "implement": {
+      "type": "object",
+      "description": "one entry per driver/implement spawn (task mode or fix mode); phases.implement stays the aggregate status",
+      "properties": {
+        "runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["mode", "commit", "at"],
+            "properties": {
+              "mode": { "enum": ["task", "fix"] },
+              "task_id": { "type": "string" },
+              "round": { "type": "integer" },
+              "commit": { "type": "string", "description": "SHA of the commit this spawn produced" },
+              "summary": { "type": "string" },
+              "at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      }
+    },
     "audit": {
       "type": "object",
       "properties": {
-        "verdict": { "enum": ["pass", "fail"] },
-        "rounds": { "type": "array", "items": { "type": "object" } }
+        "verdict": {
+          "enum": ["pass", "fail"],
+          "description": "fail iff any finding with status=fail has severity blocker or major; minor/nit failures are warnings, not failures"
+        },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "integer" },
+              "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+              "verdict": { "enum": ["pass", "fail"] },
+              "evidence_file": { "type": "string", "description": ".plan/<slug>/audit-round-<n>.md with full evidence" }
+            }
+          }
+        },
+        "fixes": {
+          "type": "array",
+          "description": "repair commits spawned by the driver in fix mode",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "integer" },
+              "commit": { "type": "string" },
+              "finding_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
       }
     },
     "review": {
       "type": "object",
       "properties": {
-        "verdict": { "enum": ["pass", "fail"] },
-        "rounds": { "type": "array", "items": { "type": "object" } }
+        "verdict": {
+          "enum": ["pass", "fail"],
+          "description": "fail iff any finding has severity blocker or major; minor/nit are warnings, not failures"
+        },
+        "rounds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "integer" },
+              "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
+              "verdict": { "enum": ["pass", "fail"] }
+            }
+          }
+        },
+        "fixes": {
+          "type": "array",
+          "description": "repair commits spawned by the driver in fix mode",
+          "items": {
+            "type": "object",
+            "properties": {
+              "round": { "type": "integer" },
+              "commit": { "type": "string" },
+              "finding_ids": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
       }
     },
     "qa": {
@@ -105,7 +200,20 @@
         "verdict": { "enum": ["pass", "fail", "skipped"] },
         "exit_code": { "type": "integer" },
         "log": { "type": "string", "description": "path to full log under .plan/, e.g. .plan/ABC-123/qa.log" },
-        "failures": { "type": "array", "items": { "type": "object" } }
+        "log_excerpt": { "type": "string", "description": "short tail of the log kept inline in state; the full log lives at qa.log" },
+        "failures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["title", "excerpt"],
+            "properties": {
+              "title": { "type": "string" },
+              "file": { "type": "string" },
+              "line": { "type": "integer" },
+              "excerpt": { "type": "string" }
+            }
+          }
+        }
       }
     },
     "history": {
@@ -133,7 +241,8 @@
         "url": { "type": "string" },
         "base": { "type": "string", "description": "base branch (repo default, fallback main)" },
         "head": { "type": "string", "description": "head branch (the cycle branch)" },
-        "title": { "type": "string" }
+        "title": { "type": "string" },
+        "draft": { "type": "boolean", "description": "true when opened via --draft" }
       }
     }
   },

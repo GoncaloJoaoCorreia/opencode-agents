@@ -25,9 +25,10 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Linear: MCP server `linear-project` (https://mcp.linear.app/mcp), READ-ONLY:
   `get_issue` / `list_comments` etc. may be called without prompting; all
   create/update/save/delete tools are hard-denied.
-- Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`, `--force`,
+- Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`, `--force`, `--draft`,
   `--<phase>-variant <name>` — parsed by the driver into `state.params`; on resume, newly
-  passed flags win. `--force` re-runs all requested phases even if `done`.
+  passed flags win. `--force` re-runs all requested phases even if `done`. `--draft` opens
+  the PR as a draft (pr phase only).
 - LIMITATION: the driver requires an interactive client — the driver and preplan use the
   `question` tool, so headless `opencode run` is not supported.
 - After the plan phase, the driver asks the user to approve the plan before implement runs
@@ -42,9 +43,20 @@ Schema: `references/state.schema.json`. Key rules:
 
 - Never delete information — append/merge. Re-runs resume from this file.
 - Summaries are SHORT (a few lines). Big content lives in files under `.plan/<slug>/`
-  (`spec.md`, `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`), referenced by path.
+  (`spec.md`, `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`,
+  `audit-round-<n>.md`), referenced by path — never inline evidence or log tails beyond a
+  short excerpt.
 - `phases.<name> = { status: pending|running|done|failed|skipped, summary, started_at, completed_at }`.
+  This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
+  `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }`.
 - `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit }`.
+- `plan.assumptions[]` / `plan.open_questions[]` — string mirrors of `plan.md`'s
+  `## Assumptions` section and open questions, so the driver's approval gate can surface
+  them without reading the file.
+- `audit.fixes[]` / `review.fixes[] = { round, commit, finding_ids[] }` — repair commits
+  the driver spawned via implement in fix mode.
+- `qa.log` = path to the full log (`.plan/<slug>/qa.log`); `qa.log_excerpt` = short tail
+  kept inline; `qa.failures[] = { title, file?, line?, excerpt }`.
 
 ## 2. Plan artifacts — `.plan/<slug>/`
 
@@ -107,6 +119,19 @@ Each phase returns to the driver ONLY: phase name, status, a 3–10 line summary
 (task ids, commit SHAs, failing criterion ids, finding ids). The driver writes it into
 `state.json`. Never return file contents wholesale.
 
+### Verdict semantics (spec-audit, code-review)
+
+Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `fail`):
+
+- `verdict = "fail"` iff at least one finding has `status: "fail"` AND severity
+  `blocker` or `major`.
+- Findings with severity `minor` (spec-audit) or `minor`/`nit` (code-review) that fail are
+  recorded in `findings` and surfaced in the phase summary as warnings — they do NOT set
+  `verdict = "fail"`.
+- Finding ids are stable across rounds: `R<round>-F<sequence>` (e.g. `R2-F3`), so fix-mode
+  implement spawns and later re-verification can reference them. Rounds > 1 re-verify prior
+  findings (fixed / still failing) and report only new findings as new.
+
 ## 6. Security / hygiene
 
 - Validate slugs before path use; never interpolate untrusted text (issue titles, spec
@@ -122,13 +147,14 @@ Each phase returns to the driver ONLY: phase name, status, a 3–10 line summary
 - `driver/pr` (phase 8, default) is the ONLY agent allowed `git push`: it runs
   `git push -u origin <branch>` (never `--force`) and then opens or updates the PR with
   the `gh` CLI. If a PR for the head branch already exists, `gh pr edit` it (idempotent
-  resume) — never create a duplicate.
+  resume) — never create a duplicate. With `--draft` (`params.draft: true`) the PR is
+  created via `gh pr create --draft` and `state.pr.draft` is set to true.
 - Base branch: repo default via `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`,
   fallback `main`. Head = `state.branch`.
-- Title: conventional-commit style. Reuse the first task-commit subject if it already
-  matches `<type>(<scope>): ...`; otherwise synthesize from the dominant commit
-  type/scope + `state.spec.title` (fallback: the slug). Sanitize/validate before any
-  shell use — never interpolate unvalidated text into a shell command.
+- Title: conventional-commit style, capped at 72 chars. Reuse the first task-commit
+  subject if it already matches `<type>(<scope>): ...`; otherwise synthesize from the
+  dominant commit type/scope + `state.spec.title` (fallback: the slug). Sanitize/validate
+  before any shell use — never interpolate unvalidated text into a shell command.
 - Body: follow the target repo's PR template when one exists (`.github/PULL_REQUEST_TEMPLATE.md`,
   `.github/PULL_REQUEST_TEMPLATE/*.md`, `docs/PULL_REQUEST_TEMPLATE.md`, root
   `PULL_REQUEST_TEMPLATE.md`); keep it SHORT and review-focused — Summary, How to review
