@@ -25,10 +25,11 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Linear: MCP server `linear-project` (https://mcp.linear.app/mcp), READ-ONLY:
   `get_issue` / `list_comments` etc. may be called without prompting; all
   create/update/save/delete tools are hard-denied.
-- Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`, `--force`, `--draft`,
-  `--<phase>-variant <name>` — parsed by the driver into `state.params`; on resume, newly
-  passed flags win. `--force` re-runs all requested phases even if `done`. `--draft` opens
-  the PR as a draft (pr phase only).
+- Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`,
+  `--qa-scope scoped|full`, `--force`, `--draft`, `--<phase>-variant <name>` — parsed by the
+  driver into `state.params`; on resume, newly passed flags win. `--force` re-runs all
+  requested phases even if `done`. `--draft` opens the PR as a draft (pr phase only).
+  `--qa-scope` sets `params.qa_scope` (default `"scoped"`).
 - LIMITATION: the driver requires an interactive client — the driver and preplan use the
   `question` tool, so headless `opencode run` is not supported.
 - After the plan phase, the driver asks the user to approve the plan before implement runs
@@ -49,14 +50,36 @@ Schema: `references/state.schema.json`. Key rules:
 - `phases.<name> = { status: pending|running|done|failed|skipped, summary, started_at, completed_at }`.
   This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
   `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }`.
-- `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit }`.
+- `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit, audit?, qa? }` —
+  `audit`/`qa` are the per-task gate verdicts (pass|fail|skipped), set by the
+  per-task gate (always on).
 - `plan.assumptions[]` / `plan.open_questions[]` — string mirrors of `plan.md`'s
   `## Assumptions` section and open questions, so the driver's approval gate can surface
   them without reading the file.
-- `audit.fixes[]` / `review.fixes[] = { round, commit, finding_ids[] }` — repair commits
-  the driver spawned via implement in fix mode.
+- `audit.fixes[]` / `review.fixes[]` — repair commits the driver spawned via implement in
+  fix mode. `audit.fixes[]` entries carry `scope: "task"|"cycle"` + `task_id?`;
+  `review.fixes[]` are always cycle-scope: `{ round, commit, finding_ids[] }`.
 - `qa.log` = path to the full log (`.plan/<slug>/qa.log`); `qa.log_excerpt` = short tail
   kept inline; `qa.failures[] = { title, file?, line?, excerpt }`.
+- **Per-task gating (always on):**
+  the driver's implement fan-out wraps each task before moving to the next:
+  `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`) with
+  bounded fix rounds → `quality-gate` (`scope: "task"`, `task_id`) with bounded fix rounds.
+  A task becomes `done` only with `commit` set AND `audit: "pass"` AND `qa: "pass"|"skipped"`
+  (per-task verdicts are stored on the `plan.tasks[]` entry). After ALL tasks, spec-audit and
+  quality-gate run once more with `scope: "cycle"` — the cycle quality-gate always runs the
+  full `state.qa.command`. `params.max_rounds` bounds the repair rounds of EACH gate.
+- `audit.rounds[]` entries carry `scope` + `task_id?`; `round` is 1-based per (scope, task).
+  Task-scope evidence goes to `.plan/<slug>/audit-<task-id>-round-<n>.md`, cycle-scope to
+  `.plan/<slug>/audit-round-<n>.md`.
+- Finding ids are scope-prefixed and stable across rounds: `T<task-id>-R<round>-F<n>` (task
+  scope, e.g. `Tlogin-R1-F2`) and `C-R<round>-F<n>` (cycle scope, e.g. `C-R2-F3`).
+- `qa.runs[]` records per-task quality-gate runs:
+  `{ scope: "task", task_id, round, command, verdict: pass|fail|skipped, exit_code?, log, failures? }`
+  — `verdict: "skipped"` when `params.qa_scope` is `"scoped"` and the task declares no
+  `qa.command` in the manifest (never run the full suite per task in scoped mode). The
+  cycle-scope run keeps the top-level `qa.*` fields. `qa.fixes[] =
+  { scope, task_id?, round, commit, failure_ids[] }` for quality-gate repair commits.
 
 ## 2. Plan artifacts — `.plan/<slug>/`
 
@@ -64,9 +87,15 @@ Schema: `references/state.schema.json`. Key rules:
 - `plan.md` — human-readable plan.
 - `manifest.json` — machine-readable plan. Schema: `references/manifest.schema.json`.
   Per task: `id` (slug), `title`, `file` (`tasks/<id>.md`), `depends_on`, `files` (globs the
-  implement phase may stage), `acceptance_criteria[]` with `verification`:
-  `{ type: "command", command }` or `{ type: "manual", instructions }`. spec-audit executes
-  these — make them concrete and runnable.
+  implement phase may stage), optional `qa: { command, description? }` — the scoped command
+  the per-task quality-gate runs when `params.qa_scope` is `"scoped"` (omit it when no
+  meaningful scoped command exists; the per-task gate then records `qa: "skipped"` and the
+  full `state.qa.command` runs at cycle scope), and `acceptance_criteria[]` with
+  `verification`: `{ type: "command", command }` or `{ type: "manual", instructions }`.
+  Each criterion may set `scope: "task"` (default — verified right after the owning task's
+  commit) or `scope: "cycle"` (integration-level criterion, verified only in the end-of-cycle
+  `scope: "cycle"` audit; skipped in task scope). spec-audit executes the `command`
+  verifications — make them concrete and runnable.
 - `tasks/<task-id>.md` — one detailed file per task; implement works from these.
 
 ## 3. Commit messages (implement phase; write-history docs commit)
@@ -124,13 +153,17 @@ Each phase returns to the driver ONLY: phase name, status, a 3–10 line summary
 Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `fail`):
 
 - `verdict = "fail"` iff at least one finding has `status: "fail"` AND severity
-  `blocker` or `major`.
+  `blocker` or `major`. The verdict is computed per round within its scope: in
+  `scope: "task"` only that task's findings count; `state.audit.verdict` always reflects the
+  latest cycle-scope round.
 - Findings with severity `minor` (spec-audit) or `minor`/`nit` (code-review) that fail are
   recorded in `findings` and surfaced in the phase summary as warnings — they do NOT set
   `verdict = "fail"`.
-- Finding ids are stable across rounds: `R<round>-F<sequence>` (e.g. `R2-F3`), so fix-mode
-  implement spawns and later re-verification can reference them. Rounds > 1 re-verify prior
-  findings (fixed / still failing) and report only new findings as new.
+- Finding ids are stable across rounds and scope-prefixed: `T<task-id>-R<round>-F<sequence>`
+  in task scope, `C-R<round>-F<sequence>` in cycle scope (e.g. `Tlogin-R1-F2`, `C-R2-F3`), so
+  fix-mode implement spawns and later re-verification can reference them. Rounds > 1
+  re-verify prior findings of the same (scope, task) (fixed / still failing) and report only
+  new findings as new. code-review stays cycle-scope only: `R<round>-F<n>`.
 
 ## 6. Security / hygiene
 

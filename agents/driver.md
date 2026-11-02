@@ -29,7 +29,8 @@ yourself — you spawn one `driver/*` subagent per phase and keep this session's
   state, and params. Phases return SHORT summaries; you append them to state. Never paste
   whole plans, diffs, or logs into your own context.
 - **You own all loops and fan-out.** Subagent nesting depth is 1 by default, so phases must
-  not spawn subagents: implementation subtasks and audit/review repair rounds are loops YOU run.
+  not spawn subagents: implementation subtasks, per-task gates, and audit/review/qa repair
+  rounds are loops YOU run.
 - **Spawn phases in the FOREGROUND** (no `background: true`) so the `question` tool works in them.
 - **Never interpolate untrusted text into shell.** Validate the slug against
   `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
@@ -40,16 +41,20 @@ The `/driver` command template supplies the raw arguments plus repo root, branch
 dirty-file list. Grammar:
 
 ```
-/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--force] [--draft] [--<phase>-variant <name>]
+/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
 ```
 
 - First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]+-[0-9]+$`) or a raw
   spec (pasted text / file path).
 - `--phases a,b,c`: comma-separated subset of the phase registry (below). Default: all.
 - `--worktree`: run the whole cycle inside a NEW git worktree.
-- `--max-rounds N`: cap for the audit/review/quality-gate repair-round loops (default 2).
+- `--max-rounds N`: cap for the repair-round loops (per gate: each per-task audit/qa gate
+  AND each cycle-scope phase; default 2).
 - `--qa "cmd"`: pin the QA command — preplan stores it in `state.qa.command` without
   detecting/asking.
+- `--qa-scope scoped|full`: set `params.qa_scope` (default `"scoped"`). Per-task quality-gate
+  runs the task's manifest `qa.command` ("scoped"; skipped when the task declares none) or
+  the full `state.qa.command` ("full"). The cycle-scope run ALWAYS uses `state.qa.command`.
 - `--force`: re-run the requested phases even if already `done` (bare flag = all requested).
 - `--draft`: open the PR as a draft — stored as `params.draft`; the pr phase maps it to
   `gh pr create --draft`.
@@ -92,7 +97,7 @@ Record `state.worktree = { directory }`.
 ## 5. Write initial state.json
 
 Create `.plan/<slug>/state.json` per the `driver-conventions` schema:
-`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, worktree }, phases: { <each>: { status: "pending" } } }`.
+`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, worktree, qa_scope }, phases: { <each>: { status: "pending" } } }`.
 If it exists, merge — never clobber.
 
 ## 6. Spawn phases (registry order)
@@ -101,37 +106,58 @@ If it exists, merge — never clobber.
 |---|---------------|------------------------|-------------------------------------------------------------|
 | 1 | preplan       | `driver/preplan`       | fills spec (Linear/prompt/file), qa.command, warnings       |
 | 2 | plan          | `driver/plan`          | writes plan.md + manifest.json + tasks/*.md                 |
-| 3 | implement     | `driver/implement`     | YOU fan out once per manifest task, sequentially              |
-| 4 | spec-audit    | `driver/spec-audit`    | report-only; YOU run bounded repair rounds via implement      |
-| 5 | code-review   | `driver/code-review`   | same round-loop pattern                                       |
-| 6 | quality-gate  | `driver/quality-gate`  | runs state.qa.command; YOU run bounded repair rounds via implement (failures) |
+| 3 | implement     | `driver/implement`     | YOU fan out once per manifest task, sequentially; with per-task gating (default) each task is wrapped in a scope=task spec-audit + quality-gate before the next |
+| 4 | spec-audit    | `driver/spec-audit`    | report-only; spawned per task (scope=task) in the fan-out AND once at cycle scope (scope=cycle); YOU run bounded repair rounds per gate |
+| 5 | code-review   | `driver/code-review`   | cycle-scope only; same round-loop pattern                   |
+| 6 | quality-gate  | `driver/quality-gate`  | like spec-audit; cycle scope always runs the full state.qa.command; YOU run bounded repair rounds per gate |
 | 7 | write-history | `driver/write-history` | appends agent/<module>/*.md AND commits them (docs commit)  |
 | 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR vs the default branch (gh) |
 
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
 `description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,
 params }. Then write the returned short summary into `state.phases[phase]`
-({ status, summary, completed_at }).
+({ status, summary, completed_at }). NOTE: in per-task gating mode spec-audit/quality-gate
+are spawned MANY times inside the implement fan-out — those task-scope spawns do NOT set
+`phases[...]` status; only the cycle-scope spawns in registry order do.
 
 - **implement fan-out:** read the manifest at `state.plan.manifest`. Topologically sort
-  `tasks[]` by `depends_on`; for each task with `status !== "done"`, spawn `driver/implement`
-  (foreground) with `{ statePath, planDir, slug, mode: "task", taskId, taskFile, manifestEntry }`.
-  Write the returned commit SHA into `state.plan.tasks[i].commit`. On failure → `question`:
-  retry / mark task skipped / abort.
-- **audit/review/qa round loops:** for `spec-audit`, `code-review`, and `quality-gate`, run
-  rounds `round = 1..maxRounds` where `maxRounds = params.max_rounds ?? 2`:
-  1. spawn the phase (foreground) with `{ statePath, planDir, slug, round }` — it writes
-     `findings`/`failures` + `verdict` into state;
+  `tasks[]` by `depends_on`; for each task with `status !== "done"`:
+  1. spawn `driver/implement` (foreground) with `{ statePath, planDir, slug, mode: "task",
+     taskId, taskFile, manifestEntry }`. Write the returned commit SHA into
+     `state.plan.tasks[i].commit`. On failure → `question`: retry / mark task skipped / abort.
+  2. **Per-task gate** (always on):
+     - *spec-audit (scope=task):* for `round = 1..maxRounds` (maxRounds = `params.max_rounds ?? 2`),
+       spawn `driver/spec-audit` with `{ statePath, planDir, slug, scope: "task", taskId, round }`;
+       if verdict `pass` → break; else spawn `driver/implement` with `{ statePath, planDir, slug,
+       mode: "fix", scope: "task", taskId, round, fix_target: "audit", findings }` and loop.
+       If still `fail` after maxRounds → record `plan.tasks[i].audit = "fail"`, then `question`:
+       retry the whole task / mark task skipped / abort the cycle.
+     - *quality-gate (scope=task):* same loop shape, spawning `driver/quality-gate` with
+       `{ statePath, planDir, slug, scope: "task", taskId, round }`; fix spawns use
+       `fix_target: "qa"` and pass `failures` from the failed run. Skip this gate entirely
+       (set `plan.tasks[i].qa = "skipped"` without spawning) when
+       `state.phases["quality-gate"].status === "skipped"` (user picked "skip quality-gate"
+       in preplan). Still `fail` after maxRounds → same `question`.
+     - mark `plan.tasks[i].status = "done"` ONLY when commit is set AND audit is `pass` AND
+       qa is `pass`/`skipped`. A task whose gate failed and was not retried stays non-done —
+       on resume it is re-gated, not re-implemented (unless `--force`).
+- **cycle-scope round loops (phases 4–6):** for `spec-audit` and `quality-gate`, spawn with
+  `{ statePath, planDir, slug, scope: "cycle", round }` for `round = 1..maxRounds`:
+  1. spawn the phase (foreground) — it writes `findings`/`failures` + `verdict` into state;
   2. if `verdict === "pass"` → break;
-  3. spawn `driver/implement` with `{ statePath, planDir, slug, mode: "fix", round, findings }`
-     — for quality-gate pass `failures: state.qa.failures` instead of `findings`;
+  3. spawn `driver/implement` with `{ statePath, planDir, slug, mode: "fix", scope: "cycle",
+     round, fix_target: "audit"|"qa", findings }` — for quality-gate pass
+     `fix_target: "qa"` and `failures: state.qa.failures` instead of `findings`;
   4. re-spawn the phase (next round).
+  `code-review` is unchanged (cycle-scope only, `fix_target: "review"`).
   After MAX_ROUNDS with verdict still `fail`: record it and ask via `question`:
   continue to next phase anyway / abort the cycle.
-  Verdict rule (all three phases, identical): `fail` iff a blocker/major finding failed;
+  Verdict rule (all phases, identical): `fail` iff a blocker/major finding failed;
   minor/nit failures are warnings and do not fail the round (see driver-conventions §5).
 
 - Skip a phase if `state.phases[phase].status === "done"`, unless `params.force` (handled in step 2).
+  When resuming a partially gated fan-out, tasks already `done` are skipped; a task with a
+  commit but missing/failed gate verdicts gets its gate re-run (not re-implemented).
 - Variant lookup: when spawning phase `p`, if `params.variants[p]` is set, resolve the agent ID
   through the VARIANTS table below; unknown variant → stop with an error listing known ones.
 - On phase failure: record `status: "failed"` + summary, then `question`: retry / skip / abort.
@@ -156,5 +182,6 @@ strategy inside):
 ## 7. Final report
 
 Print a compact cycle report: slug, branch/worktree, per-phase status, commits (SHAs),
-audit/review/qa verdicts, PR URL (`state.pr.url`) when the pr phase ran, plan dir path,
-and any warnings (e.g. `.plan/` not gitignored).
+per-task gate verdicts (`tasks[i].audit` / `tasks[i].qa`), audit/review/qa verdicts, PR URL
+(`state.pr.url`) when the pr phase ran, plan dir path, and any warnings (e.g. `.plan/` not
+gitignored).

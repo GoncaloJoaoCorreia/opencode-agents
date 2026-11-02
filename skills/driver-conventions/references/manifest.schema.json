@@ -24,6 +24,15 @@
             "items": { "type": "string" },
             "description": "globs of files this task may stage/commit — implement stages only these"
           },
+          "qa": {
+            "type": "object",
+            "description": "optional scoped QA command run by the per-task quality-gate when params.qa_scope=\"scoped\" (e.g. only this task's test files). Omit when no meaningful scoped command exists — the per-task gate then records qa=skipped and the full state.qa.command runs at cycle scope",
+            "required": ["command"],
+            "properties": {
+              "command": { "type": "string", "description": "exact scoped command the task-scope quality-gate runs from the repo root" },
+              "description": { "type": "string" }
+            }
+          },
           "acceptance_criteria": {
             "type": "array",
             "items": {
@@ -32,6 +41,11 @@
               "properties": {
                 "id": { "type": "string" },
                 "text": { "type": "string" },
+                "scope": {
+                  "enum": ["task", "cycle"],
+                  "default": "task",
+                  "description": "\"task\" (default): verified in the scope=task spec-audit right after the owning task's commit. \"cycle\": integration-level criterion that only makes sense once all tasks are done — verified in the end-of-cycle scope=cycle audit, skipped in task scope"
+                },
                 "verification": {
                   "type": "object",
                   "required": ["type"],

@@ -50,8 +50,12 @@ permissions:
      open questions, and an explicit `## Assumptions` section (see below).
    - `manifest.json` — per `references/manifest.schema.json`: `tasks[]` with `id`
      (slug `^[a-z0-9]+(-[a-z0-9]+)*$`), `title`, `file`, `depends_on`, `files` (globs),
+      optional `qa: { command, description? }` — a SCOPED QA command for the per-task
+      quality-gate (e.g. `npm test -- auth`); declare one only when a meaningful scoped
+      command exists, otherwise omit it (the per-task gate then records `qa: "skipped"`
+      and the full `state.qa.command` runs at cycle scope),
      `acceptance_criteria[]` each with `verification: { type: "command", command }` or
-     `{ type: "manual", instructions }`.
+     `{ type: "manual", instructions }` plus an optional `scope: "task" | "cycle"` (default `"task"`) — mark only integration-level criteria that need ALL tasks done as `"cycle"`; those are verified in the end-of-cycle audit, not in the per-task gate.
    - `tasks/<id>.md` — full detail per task: goal, approach, files to change, edge cases,
      verification steps.
 
@@ -71,7 +75,9 @@ permissions:
    per `references/manifest.schema.json`: required top-level fields (`issue_id`, `title`,
    `tasks`); each task has `id` matching `^[a-z0-9]+(-[a-z0-9]+)*$`, `title`, `file`,
    `acceptance_criteria[]`; each criterion has `id`, `text`, and a `verification` whose `type`
-   is `command` (with `command`) or `manual` (with `instructions`); every `depends_on` entry
+   is `command` (with `command`) or `manual` (with `instructions`); a criterion's `scope`,
+   when present, must be `"task"` or `"cycle"`; a task's `qa`, when present, must have a
+   `command` string; every `depends_on` entry
    references an existing task `id` (no dangling refs, no cycles). Fix the manifest and
    re-validate until clean — a malformed manifest poisons the implement fan-out.
 6. Update `state.json` (merge, never clobber): `plan.manifest`, `plan.tasks[] =

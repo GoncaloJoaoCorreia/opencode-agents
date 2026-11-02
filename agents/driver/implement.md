@@ -1,5 +1,5 @@
 ---
-description: "Driver phase 3 — implement exactly ONE plan task (or one bounded set of audit/review findings) and commit it. One implementation = one commit."
+description: "Driver phase 3 — implement exactly ONE plan task (or one bounded set of audit/review/qa findings) and commit it. One implementation = one commit. Fix mode can be scoped to a single task's gate (scope=task)."
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -16,15 +16,18 @@ permissions:
 
 You implement exactly ONE unit of work and commit it. The driver spawns you once per plan
 task (sequentially, in `depends_on` order), or once per repair round with findings from
-spec-audit / code-review.
+spec-audit / code-review / quality-gate — in per-task gating mode the repair rounds are
+scoped to one task (`scope: "task"`, `taskId`).
 
 ## Inputs (from the driver's prompt)
 
 - `statePath`, `planDir` (`.plan/<slug>`), `slug`
 - **Task mode:** `mode: "task"`, `taskId`, `taskFile` (`.plan/<slug>/tasks/<id>.md`),
-  plus the task's manifest entry (`files` globs, `acceptance_criteria`)
-- **Fix mode:** `mode: "fix"`, `round`, `findings[]` (audit/review findings with file/line)
-  — scope STRICTLY to these findings
+  plus the task's manifest entry (`files` globs, `acceptance_criteria`, optional `qa`)
+- **Fix mode:** `mode: "fix"`, `round`, `scope` (`"task"` | `"cycle"`), `taskId?` (required
+  when `scope === "task"`), `fix_target` (`"audit"` | `"review"` | `"qa"` — which state list
+  the repair commit is recorded under), and `findings[]` (audit/review findings with
+  file/line) or `failures[]` (qa failures) — scope STRICTLY to these
 
 ## Steps
 
@@ -32,7 +35,8 @@ spec-audit / code-review.
 2. Read the task file, the manifest entry, and `plan.md`. Read the code in scope
    (the `files` globs). In fix mode, read each finding's file:line.
 3. Implement. Stay scoped — no drive-by refactors. In fix mode, fix only the listed findings.
-4. Self-verify: run the task's `verification.command`s.
+4. Self-verify: run the task's `verification.command`s (and the scoped `qa.command` when
+   this spawn is a task-scope fix for a qa failure).
    If a failure is caused by another not-yet-done task (`depends_on`), note it and stop —
    do not expand scope.
 5. Commit:
@@ -45,22 +49,26 @@ spec-audit / code-review.
    - Message per conventions: `<type>(<module>): <subject>` + body + trailers
      `Driver-Task: <task-id>` and `Refs: <slug>`. Module = first path segment of the changed
      files under `src/`, else first segment, else `core` (same rule as history).
-     Fix mode: type `fix`, trailer `Driver-Fix-Round: <round>` instead of `Driver-Task`.
-   - NEVER push.
+     Fix mode: type `fix`, trailer `Driver-Fix-Round: <round>` (plus `Driver-Fix-Task:
+     <task-id>` when `scope === "task"`) instead of `Driver-Task`; keep the `Refs` trailer.
+   - NEVER push. NEVER amend — the commit SHA must stay stable (state references it).
 6. Record the commit SHA.
 
 ## Output contract (to the driver)
 
 - Update `state.json` (merge, never clobber):
-  - task mode: `plan.tasks[<id>] = { status: "done", commit: <sha> }`
-  - fix mode: append to `state.audit.fixes[]` / `state.review.fixes[] =
-    { round, commit, finding_ids: [...] }`
+  - task mode: `plan.tasks[<id>] = { status: "done", commit: <sha> }` (the driver's gate
+    sets the per-task `audit` / `qa` verdicts afterwards)
+  - fix mode: append to the list named by `fix_target` —
+    `state.audit.fixes[] += { scope, task_id?, round, commit, finding_ids }`,
+    `state.review.fixes[] += { round, commit, finding_ids }`, or
+    `state.qa.fixes[] += { scope, task_id?, round, commit, failure_ids }`
   - append ONE entry per spawn to `state.implement.runs[] =
     { mode: "task"|"fix", task_id?, round?, commit: <sha>, summary, at }` —
     `phases.implement` stays a single aggregate `{ status, summary, ... }` entry, do NOT
     append per-spawn entries to it.
-- Return a SHORT summary: task id or finding ids, commit SHA, files changed, verification
-  results, anything noteworthy.
+- Return a SHORT summary: task id or finding/failure ids, commit SHA, files changed,
+  verification results, anything noteworthy.
 
 ## Gotchas
 

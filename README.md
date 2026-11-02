@@ -10,8 +10,8 @@ state file, so no single conversation ever has to hold the whole cycle.
 
 ```mermaid
 flowchart LR
-    DRV["/driver ABC-123"] --> PRE[preplan] --> PLAN[plan] --> IMP["implement ×N"]
-    IMP --> AUD[spec-audit] --> REV[code-review] --> QA[quality-gate]
+    DRV["/driver ABC-123"] --> PRE[preplan] --> PLAN[plan] --> IMP["implement ×N<br/>each task: audit + qa gate"]
+    IMP --> AUD["spec-audit (cycle)"] --> REV[code-review] --> QA["quality-gate (cycle, full)"]
     QA --> HIST[write-history] --> PR[pr]
     AUD -. "repair round" .-> IMP
     REV -. "repair round" .-> IMP
@@ -91,16 +91,24 @@ Then, from the repo root:
 |---|---|---|
 | preplan | `/phases/preplan` | Fetches the Linear issue (or takes a pasted/file spec), picks the QA command, checks the repo setup, writes `.plan/<slug>/state.json` |
 | plan | `/phases/plan` | Explores the code and writes `.plan/<slug>/plan.md` + `manifest.json` + `tasks/*.md` — you get asked to approve the plan before anything is built |
-| implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope) |
-| spec-audit | `/phases/spec-audit` | Verifies every acceptance criterion against the actual code/commits (runs the plan's verification commands) |
+| implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope); each commit is then gated per task (below) |
+| spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
-| quality-gate | `/phases/quality-gate` | Runs the project's test/lint/build command, records the verdict, and feeds failures back into repair rounds |
+| quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
 | write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR against the repo's default branch (`gh`), with a short, review-focused description that follows the repo's PR template when one exists |
 
+Per-task gating: right after each task's commit
+the driver runs spec-audit (`scope=task`) and quality-gate (`scope=task`) for that task,
+each with bounded repair rounds — so every commit on the branch is already audited and gated
+before the next task builds on it, and a task counts as done only when its commit passed both
+gates. After all tasks, spec-audit and quality-gate run once more at cycle scope (quality-gate
+then always runs the full QA command) to catch cross-task integration issues; code-review
+always reviews the whole cycle.
+
 Audit, review, and quality-gate never edit code — when they find something, the driver
 sends `implement` back with just those findings/failures, in bounded repair rounds
-(`--max-rounds`, default 2). A round's verdict fails only on blocker/major findings;
+(`--max-rounds`, default 2, per gate). A round's verdict fails only on blocker/major findings;
 minor/nit findings are recorded as warnings. If anything still fails after the max rounds,
 the driver asks you whether to continue anyway or abort; a phase that errors out prompts
 retry/skip/abort. Re-running `/driver` resumes from `.plan/<slug>/state.json` instead of
@@ -121,6 +129,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 /driver ABC-123 --force                          # re-run the requested phases even if already done
 /driver ABC-123 --draft                          # open the PR as a draft
 /driver ABC-123 --plan-variant thorough          # use a variant implementation of a phase
+/driver ABC-123 --qa-scope full                  # run the full QA command after every task too
 /phases/spec-audit ABC-123                       # run a single phase standalone
 ```
 
@@ -130,6 +139,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 | `--worktree` | Run the cycle in a new git worktree named after the slug |
 | `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
 | `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |
+| `--qa-scope scoped\|full` | Per-task quality-gate source: the task's scoped `qa.command` (default) or the full QA command; the cycle-scope run always uses the full command |
 | `--force` | Re-run the requested phases even if marked done |
 | `--draft` | Open the PR as a draft (`pr` phase) |
 | `--<phase>-variant <name>` | Swap in a variant implementation of a phase |
@@ -138,7 +148,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 
 - **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md`,
   `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`, `audit-round-<n>.md` (audit evidence),
-  `pr-body.md` (PR description draft).
+  `pr-body.md` (PR description draft), plus per-task gate artifacts `audit-<task>-round-<n>.md` and `qa-<task>-round-<n>.log`.
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
 final `pr` phase, which pushes the branch and opens the PR.

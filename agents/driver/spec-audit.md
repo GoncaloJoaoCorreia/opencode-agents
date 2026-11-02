@@ -1,5 +1,5 @@
 ---
-description: "Driver phase 4 — verify the implementation (commits in state.plan.tasks) against the plan's acceptance criteria. Report-only: the driver spawns driver/implement for repairs in bounded rounds."
+description: "Driver phase 4 — verify the implementation against the plan's acceptance criteria, per task (scope=task, right after its commit) and/or once at cycle end (scope=cycle). Report-only: the driver spawns driver/implement for repairs in bounded rounds."
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -16,18 +16,29 @@ permissions:
 # Phase: spec-audit
 
 Compare what was implemented (commit SHAs in `state.plan.tasks`) against the acceptance
-criteria in `manifest.json` / `tasks/*.md`. You are REPORT-ONLY: never edit code — the
-driver spawns `driver/implement` for each repair round and re-runs you.
+criteria in `manifest.json` / `tasks/*.md`. You run in two scopes: `scope: "task"` right
+after one task's commit (per-task gate, default on), and `scope: "cycle"` once at the end.
+You are REPORT-ONLY: never edit code — the driver spawns `driver/implement` for each repair
+round and re-runs you.
 
 ## Inputs (from the driver's prompt)
 
-- `statePath`, `planDir` (`.plan/<slug>`), `slug`, `round` (1-based)
+- `statePath`, `planDir` (`.plan/<slug>`), `slug`
+- `scope`: `"task"` (verify one task's criteria against its commit) or `"cycle"`
+  (end-of-cycle pass over all tasks)
+- `taskId`: required when `scope === "task"`
+- `round` (1-based, counted per (scope, taskId))
 
 ## Steps
 
 1. Load the `driver-conventions` skill.
-2. Read `manifest.json` + all `tasks/*.md` + `plan.md`. For each task and each acceptance
-   criterion:
+2. Read `manifest.json` + `plan.md`. In task scope read only `tasks/<taskId>.md` and that
+   task's manifest entry; in cycle scope read all `tasks/*.md`. For each task in scope and
+   each acceptance criterion:
+   - in task scope: skip criteria with `scope: "cycle"` (verified in the cycle pass) and
+     criteria belonging to other tasks;
+   - in cycle scope: re-verify task-scope criteria too — the per-task gates should already
+     have passed them, so a failure here is a real regression and a finding;
    - inspect the code and the task's commit (`git show <sha>`) — verify yourself, never
      trust the implementer's summary; record evidence (`file:line`, short command output);
    - if `verification.type === "command"`, run the exact command from the repo root
@@ -35,23 +46,32 @@ driver spawns `driver/implement` for each repair round and re-runs you.
    - if `verification.type === "manual"`, verify by code inspection and mark it as such.
    - record `{ id, task, criterion, status: pass|fail, severity, evidence_ref }`.
      severity: blocker (criterion not met / broken) > major > minor.
-     Finding ids are stable across rounds: `R<round>-F<n>` (e.g. `R1-F2`).
+     Finding ids are stable across rounds and scope-prefixed: `T<taskId>-R<round>-F<n>` in
+     task scope (e.g. `Tlogin-R1-F2`), `C-R<round>-F<n>` in cycle scope (e.g. `C-R1-F3`).
    - **Evidence lives in a file, not in state:** write the full evidence (file:line, command,
-     command output) to `.plan/<slug>/audit-round-<round>.md`; in state keep only
-     `evidence_ref: ".plan/<slug>/audit-round-<round>.md"` per finding. State stays small.
+     command output) to `.plan/<slug>/audit-<taskId>-round-<round>.md` (task scope) or
+     `.plan/<slug>/audit-round-<round>.md` (cycle scope); in state keep only the
+     `evidence_ref` path per finding. State stays small.
 3. Write to `state.json` (merge, never clobber):
-   `state.audit.rounds[round] = { round, findings, verdict, evidence_file }`,
-   `state.audit.verdict = "pass" | "fail"` — **fail iff any finding with `status: "fail"` has
-   severity `blocker` or `major`**; minor failures are recorded as warnings (surfaced in the
-   summary) and do NOT fail the round (same rule as code-review, see driver-conventions §5),
-   `phases["spec-audit"] = { status: "done", summary, completed_at }`.
+   - append `state.audit.rounds[] += { scope, task_id?, round, findings, verdict, evidence_file }`
+     (round is 1-based per (scope, taskId));
+   - verdict per round — **fail iff any finding with `status: "fail"` has severity `blocker`
+     or `major`** within this round's scope; minor failures are recorded as warnings
+     (surfaced in the summary) and do NOT fail the round (same rule as code-review, see
+     driver-conventions §5);
+   - in **cycle** scope also set `state.audit.verdict` (the aggregate) and
+     `phases["spec-audit"] = { status: "done", summary, completed_at }`;
+   - in **task** scope set `plan.tasks[<taskId>].audit = verdict` and DO NOT touch
+     `phases["spec-audit"]` — the driver spawns you once per task during the implement
+     fan-out and once more at cycle scope; the phase-level status belongs to the
+     cycle-scope run only.
 
 ## Output contract (to the driver)
 
-Short summary only: round, pass/fail counts, the failed blocker/major finding ids (these set
-verdict=fail), and any minor warnings. The driver loops: if verdict = fail, it spawns
-`driver/implement` with the failing blocker/major findings, then re-spawns you, up to
-MAX_ROUNDS (default 2).
+Short summary only: scope, taskId (if any), round, pass/fail counts, the failed
+blocker/major finding ids (these set verdict=fail), and any minor warnings. The driver loops:
+if verdict = fail, it spawns `driver/implement` (fix mode, same scope) with the failing
+blocker/major findings, then re-spawns you, up to `params.max_rounds` (default 2) per gate.
 
 ## Gotchas
 

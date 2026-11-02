@@ -54,6 +54,11 @@
         "worktree": { "type": "boolean" },
         "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
         "qa": { "type": "string", "description": "--qa override for state.qa.command" },
+        "qa_scope": {
+          "enum": ["scoped", "full"],
+          "default": "scoped",
+          "description": "--qa-scope: per-task (scope=task) quality-gate runs the task's manifest qa.command (\"scoped\") or the full state.qa.command (\"full\"); the cycle-scope run always runs state.qa.command"
+        },
         "force": { "type": "boolean", "description": "re-run requested phases even if done" },
         "draft": { "type": "boolean", "description": "--draft: open the PR as a draft (pr phase)" },
         "variants": {
@@ -100,7 +105,15 @@
               "title": { "type": "string" },
               "file": { "type": "string" },
               "status": { "enum": ["pending", "done", "skipped"] },
-              "commit": { "type": "string", "description": "SHA once implemented" }
+              "commit": { "type": "string", "description": "SHA once implemented" },
+              "audit": {
+                "enum": ["pass", "fail", "skipped"],
+                "description": "per-task spec-audit verdict (scope=task). A task is done only with commit + audit pass + qa pass/skipped"
+              },
+              "qa": {
+                "enum": ["pass", "fail", "skipped"],
+                "description": "per-task quality-gate verdict (scope=task)"
+              }
             }
           }
         }
@@ -118,6 +131,8 @@
             "properties": {
               "mode": { "enum": ["task", "fix"] },
               "task_id": { "type": "string" },
+              "scope": { "enum": ["task", "cycle"], "description": "fix mode only: which gate the repair belongs to" },
+              "fix_target": { "enum": ["audit", "review", "qa"], "description": "fix mode only: which state list the fix is recorded under" },
               "round": { "type": "integer" },
               "commit": { "type": "string", "description": "SHA of the commit this spawn produced" },
               "summary": { "type": "string" },
@@ -139,10 +154,12 @@
           "items": {
             "type": "object",
             "properties": {
-              "round": { "type": "integer" },
+              "scope": { "enum": ["task", "cycle"], "description": "task = verify one task's criteria right after its commit; cycle = end-of-cycle pass over everything" },
+              "task_id": { "type": "string", "description": "set when scope=task" },
+              "round": { "type": "integer", "description": "1-based, counted per (scope, task_id)" },
               "findings": { "type": "array", "items": { "$ref": "#/$defs/finding" } },
               "verdict": { "enum": ["pass", "fail"] },
-              "evidence_file": { "type": "string", "description": ".plan/<slug>/audit-round-<n>.md with full evidence" }
+              "evidence_file": { "type": "string", "description": ".plan/<slug>/audit-round-<n>.md (cycle) or .plan/<slug>/audit-<task>-round-<n>.md (task) with full evidence" }
             }
           }
         },
@@ -152,6 +169,8 @@
           "items": {
             "type": "object",
             "properties": {
+              "scope": { "enum": ["task", "cycle"] },
+              "task_id": { "type": "string", "description": "set when scope=task" },
               "round": { "type": "integer" },
               "commit": { "type": "string" },
               "finding_ids": { "type": "array", "items": { "type": "string" } }
@@ -211,6 +230,38 @@
               "file": { "type": "string" },
               "line": { "type": "integer" },
               "excerpt": { "type": "string" }
+            }
+          }
+        },
+        "runs": {
+          "type": "array",
+          "description": "per-task (scope=task) quality-gate runs; the cycle-scope run stays in the top-level qa fields",
+          "items": {
+            "type": "object",
+            "required": ["scope", "round", "verdict"],
+            "properties": {
+              "scope": { "enum": ["task"] },
+              "task_id": { "type": "string" },
+              "round": { "type": "integer", "description": "1-based, counted per task" },
+              "command": { "type": "string", "description": "command actually run (task qa.command or state.qa.command)" },
+              "verdict": { "enum": ["pass", "fail", "skipped"], "description": "skipped when qa_scope=scoped and the task declares no qa.command" },
+              "exit_code": { "type": "integer" },
+              "log": { "type": "string", "description": "path to full log, e.g. .plan/<slug>/qa-<task>-round-<n>.log" },
+              "failures": { "type": "array", "items": { "type": "object", "required": ["title", "excerpt"], "properties": { "title": { "type": "string" }, "file": { "type": "string" }, "line": { "type": "integer" }, "excerpt": { "type": "string" } } } }
+            }
+          }
+        },
+        "fixes": {
+          "type": "array",
+          "description": "repair commits spawned by the driver for quality-gate failures",
+          "items": {
+            "type": "object",
+            "properties": {
+              "scope": { "enum": ["task", "cycle"] },
+              "task_id": { "type": "string", "description": "set when scope=task" },
+              "round": { "type": "integer" },
+              "commit": { "type": "string" },
+              "failure_ids": { "type": "array", "items": { "type": "string" } }
             }
           }
         }
