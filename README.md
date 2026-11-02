@@ -150,6 +150,8 @@ run, read live from `.plan/<slug>/state.json`:
 ○ PR
 ```
 
+<img src="docs/driver-viz-sidebar.png" width="420" alt="driver-viz sidebar flow chart in the OpenCode TUI">
+
 `✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase. Worktree
 runs (`--worktree`) show up automatically — the driver moves the session into the worktree.
 With several concurrent runs in one repo, `/driver-viz` (palette: "Driver: show next run")

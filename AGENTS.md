@@ -46,15 +46,18 @@ commands/driver.md          # /driver entry point (static `!` shell blocks — s
 commands/phases/*.md        # standalone /phases/<phase> wrappers (subagent: true)
 skills/driver-conventions/  # THE single source of truth for all shared contracts
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
+docs/                       # repo-only docs (NOT in the release payload): driver-viz-sidebar.png = the README screenshot
 plugins/driver-viz/         # TUI-only plugin: animated sidebar flow chart of the current run
   tui.tsx                   #   entrypoint (Plugin.define, sidebar.content slot, keymap, fs watch)
-  lib/phases.ts             #   phase registry mirror of agents/driver.md §6 (validate.sh enforces sync)
+  lib/phases.ts             #   phase registry mirror of agents/driver.md §6 (validate-driver-viz.sh enforces sync)
   lib/state.ts              #   .plan/<slug>/state.json scanning + pure derivations (unit-tested)
   lib/theme.ts              #   defensive theme-token resolution with fallbacks
   lib/FlowChart.tsx         #   the stepper component (spinner + pulsing connector)
   test/state.test.ts        #   node --test (node >= 22.18 strips types; no build)
 scripts/validate.sh         # pre-release validation of agent/command/skill declarations — CI + local
 scripts/validate-driver-viz.sh  # driver-viz plugin checks + node --test — CI + local, separate step
+scripts/screenshot-driver-viz.py  # regenerates docs/driver-viz-sidebar.png (kept out of plugins/ so the
+                                  # release payload never ships it — see "driver-viz plugin" below)
 .github/workflows/release.yml  # manual release pipeline (see Releases)
 install.sh                  # dual-mode installer (source checkout vs checksum-verified release)
 ```
@@ -72,6 +75,11 @@ validated against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; unreadable stat
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may
 omit tokens). Change a phase name/order in `agents/driver.md` §6 → update
 `plugins/driver-viz/lib/phases.ts` — `scripts/validate-driver-viz.sh` fails otherwise.
+README screenshot: `docs/driver-viz-sidebar.png` (embedded in README.md). Regenerate after
+layout changes with `python3 scripts/screenshot-driver-viz.py` — needs `pillow` and a
+JetBrains Mono Nerd Font installed (glyph coverage for the braille spinner). The generator
+lives in top-level `scripts/`, not under `plugins/`, so it is never shipped in the release
+payload or installed into the config dir.
 
 ## Releases
 

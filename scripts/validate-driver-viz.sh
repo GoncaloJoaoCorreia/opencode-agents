@@ -60,6 +60,15 @@ Dir.glob("plugins/driver-viz/lib/*.ts").each do |f|
   end
 end
 
+# README screenshot: embedded path must exist, and the generator must live in top-level
+# scripts/ (NOT under plugins/ — the release payload ships plugins/ and must stay code-only)
+shot = "docs/driver-viz-sidebar.png"
+gen = "scripts/screenshot-driver-viz.py"
+failures << "README.md does not embed #{shot}" unless File.exist?("README.md") && File.read("README.md").include?(shot)
+failures << "missing #{shot} (regenerate: python3 #{gen})" unless File.exist?(shot)
+failures << "missing #{gen}" unless File.exist?(gen)
+failures << "#{gen} must not live under plugins/ (it would ship in the release payload)" if File.exist?("plugins/driver-viz/scripts/screenshot.py")
+
 if failures.empty?
   puts "ok: driver-viz package, entrypoint, phase-registry sync all valid"
 else
