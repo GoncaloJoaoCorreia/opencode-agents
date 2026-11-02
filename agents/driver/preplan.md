@@ -38,7 +38,7 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
 
 - `statePath` — absolute path to `.plan/<slug>/state.json`
 - `slug`, `issueOrSpec` (Linear key or raw spec), `repoRoot`, `branch`
-- `params` — { phases: [...], worktree: bool }
+- `params` — { phases: [...] | undefined, skip: [...] | undefined, worktree: bool }
 
 ## Steps
 
@@ -57,7 +57,10 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
    - Else: write the raw spec to `.plan/<slug>/spec.md` and record
      `state.spec = { source: "prompt", ref: slug, spec_file: ".plan/<slug>/spec.md" }`.
      (A file under .plan/ keeps state.json small and gives later phases a stable reference.)
-3. **QA command** (only if `"quality-gate"` is in `params.phases`):
+3. **QA command** (only if `"quality-gate"` is in the effective run set — `params.phases`
+   when set, else all phases MINUS `params.skip`; with `--skip quality-gate` there is
+   nothing to detect, so skip this step entirely and leave `phases["quality-gate"].status`
+   = `"skipped"` for the driver):
    - If `params.qa` is set (driver `--qa "cmd"`): use it directly — `state.qa.command = params.qa`,
      skip detection and the question.
    - Else if `state.qa.command` already exists (resume) and `params.force` is NOT set: keep the

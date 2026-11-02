@@ -25,11 +25,18 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Linear: MCP server `linear-project` (https://mcp.linear.app/mcp), READ-ONLY:
   `get_issue` / `list_comments` etc. may be called without prompting; all
   create/update/save/delete tools are hard-denied.
-- Flags: `--phases`, `--worktree`, `--max-rounds N`, `--qa "cmd"`,
+- Flags: `--phases`, `--skip`, `--worktree`, `--max-rounds N`, `--qa "cmd"`,
   `--qa-scope scoped|full`, `--force`, `--draft`, `--<phase>-variant <name>` — parsed by the
   driver into `state.params`; on resume, newly passed flags win. `--force` re-runs all
   requested phases even if `done`. `--draft` opens the PR as a draft (pr phase only).
-  `--qa-scope` sets `params.qa_scope` (default `"scoped"`).
+  `--qa-scope` sets `params.qa_scope` (default `"scoped"`). `--skip a,b,...` stores
+  `params.skip[]` and marks those phases `status: "skipped"` — they are never spawned,
+  including their per-task gate spawns inside the implement fan-out (`--skip spec-audit` /
+  `--skip quality-gate` ⇒ per-task `audit`/`qa` verdicts become `"skipped"`). `--skip` is
+  mutually exclusive with `--phases` (error if both). On a fresh run (no state.json),
+  `preplan`/`plan` may not be skipped (hard error); on resume any phase may be skipped, but
+  a skipped phase's outputs must already exist or the next phase that needs them stops with
+  an error. `--force` never un-skips.
 - LIMITATION: the driver requires an interactive client — the driver and preplan use the
   `question` tool, so headless `opencode run` is not supported.
 - After the plan phase, the driver asks the user to approve the plan before implement runs
@@ -48,6 +55,7 @@ Schema: `references/state.schema.json`. Key rules:
   `audit-round-<n>.md`), referenced by path — never inline evidence or log tails beyond a
   short excerpt.
 - `phases.<name> = { status: pending|running|done|failed|skipped, summary, started_at, completed_at }`.
+  `skipped` is set by `--skip` (`params.skip[]`) or by preplan's "skip quality-gate" choice.
   This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
   `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }`.
 - `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit, audit?, qa? }` —

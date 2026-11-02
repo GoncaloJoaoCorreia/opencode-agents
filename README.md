@@ -131,6 +131,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 /driver ABC-123                                  # full cycle, fetches the Linear issue
 /driver "add rate limiting to the API"           # raw spec — the driver asks for a slug (e.g. ABC-123)
 /driver ABC-123 --phases plan,implement          # only some phases (progress is kept, so this resumes)
+/driver ABC-123 --skip quality-gate,write-history # all phases except these (cannot be combined with --phases)
 /driver ABC-123 --worktree                       # whole cycle inside a new git worktree named ABC-123
 /driver ABC-123 --max-rounds 3 --qa "npm test"   # cap repair rounds, pin the QA command
 /driver ABC-123 --force                          # re-run the requested phases even if already done
@@ -143,6 +144,7 @@ dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver
 | Flag | Effect |
 |---|---|
 | `--phases a,b,...` | Run only these phases (default: all) |
+| `--skip a,b,...` | Skip these phases — marked `skipped`, never run (incl. their per-task gates). Mutually exclusive with `--phases`; on a fresh run `preplan`/`plan` cannot be skipped |
 | `--worktree` | Run the cycle in a new git worktree named after the slug |
 | `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
 | `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |

@@ -41,12 +41,22 @@ The `/driver` command template supplies the raw arguments plus repo root, branch
 dirty-file list. Grammar:
 
 ```
-/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
+/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--skip a,b,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
 ```
 
 - First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]+-[0-9]+$`) or a raw
   spec (pasted text / file path).
 - `--phases a,b,c`: comma-separated subset of the phase registry (below). Default: all.
+- `--skip a,b,c`: comma-separated phases to SKIP — each name must be one of the 8 registry
+  phases (unknown name → stop and report). Skipped phases get `state.phases[p].status =
+  "skipped"` and are never spawned. Stored as `params.skip`. **`--phases` and `--skip` are
+  mutually exclusive — passing both is an error.** On a FRESH run (no state.json yet),
+  `preplan` and `plan` may NOT be skipped (hard error, checked in step 2 — everything
+  downstream needs the spec + manifest). On resume any phase may be skipped. Skipping
+  `spec-audit` / `quality-gate` also suppresses their per-task spawns in the implement
+  fan-out (step 6) — `--skip quality-gate` is the non-interactive equivalent of preplan's
+  "skip quality-gate" choice. `--force` does NOT un-skip: resume without the phase in
+  `--skip` to re-run it.
 - `--worktree`: run the whole cycle inside a NEW git worktree.
 - `--max-rounds N`: cap for the repair-round loops (per gate: each per-task audit/qa gate
   AND each cycle-scope phase; default 2).
@@ -72,9 +82,14 @@ tool, so headless `opencode run` is not supported.
 - Otherwise ask the user with the `question` tool for a slug (must match the pattern;
   suggest one derived from the spec).
 - **Resume check:** if `.plan/<slug>/state.json` already exists, load it and SKIP steps 3–5
-  (setup already happened) — go straight to step 6.
+  (setup already happened) — go straight to step 6. Otherwise this is a FRESH run.
+- **Fresh-run skip guard (hard error):** on a fresh run, if `params.skip` contains `preplan`
+  or `plan` → stop with an error: "cannot --skip preplan/plan on a fresh run — every
+  downstream phase needs the spec and the manifest. Run them first, then resume with
+  --skip." Do not guess or proceed.
 - **`--force`:** when resuming, reset `state.phases[p].status` from `"done"` to `"pending"`
-  for every requested phase before running them.
+  for every requested phase before running them. Phases in `params.skip` stay `skipped` —
+  force never un-skips.
 
 ## 3. Optional worktree (`--worktree`)
 
@@ -97,7 +112,7 @@ Record `state.worktree = { directory }`.
 ## 5. Write initial state.json
 
 Create `.plan/<slug>/state.json` per the `driver-conventions` schema:
-`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, worktree, qa_scope }, phases: { <each>: { status: "pending" } } }`.
+`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, skip, worktree, qa_scope }, phases: { <each>: { status: "pending" } } }`.
 If it exists, merge — never clobber.
 
 ## 6. Spawn phases (registry order)
@@ -120,13 +135,26 @@ params }. Then write the returned short summary into `state.phases[phase]`
 are spawned MANY times inside the implement fan-out — those task-scope spawns do NOT set
 `phases[...]` status; only the cycle-scope spawns in registry order do.
 
+- **Effective phase set + `--skip`:** the run set is `params.phases` if set, else all 8
+  registry phases in order, MINUS `params.skip` (`--phases` + `--skip` together already
+  errored in step 1). For each phase in `params.skip`, immediately write
+  `state.phases[p] = { status: "skipped", summary: "skipped via --skip", completed_at }`
+  and never spawn it — including its per-task spawns in the implement fan-out below.
+- **Prerequisite guard before every spawn:** verify the phase's inputs exist — implement
+  needs `state.plan.manifest`; the cycle-scope spec-audit/quality-gate/code-review need at
+  least one task commit; write-history needs implement runs; pr needs commits on the cycle
+  branch. If an input is missing because its producing phase was skipped (or never ran),
+  STOP with an error naming the missing phase — do not spawn into the void.
+
 - **implement fan-out:** read the manifest at `state.plan.manifest`. Topologically sort
   `tasks[]` by `depends_on`; for each task with `status !== "done"`:
   1. spawn `driver/implement` (foreground) with `{ statePath, planDir, slug, mode: "task",
      taskId, taskFile, manifestEntry }`. Write the returned commit SHA into
      `state.plan.tasks[i].commit`. On failure → `question`: retry / mark task skipped / abort.
-  2. **Per-task gate** (always on):
-     - *spec-audit (scope=task):* for `round = 1..maxRounds` (maxRounds = `params.max_rounds ?? 2`),
+  2. **Per-task gate** (always on, unless that gate's phase was `--skip`ped):
+     - *spec-audit (scope=task):* if `state.phases["spec-audit"].status === "skipped"`
+        (`--skip spec-audit`), set `plan.tasks[i].audit = "skipped"` WITHOUT spawning.
+        Otherwise, for `round = 1..maxRounds` (maxRounds = `params.max_rounds ?? 2`),
        spawn `driver/spec-audit` with `{ statePath, planDir, slug, scope: "task", taskId, round }`;
        if verdict `pass` → break; else spawn `driver/implement` with `{ statePath, planDir, slug,
        mode: "fix", scope: "task", taskId, round, fix_target: "audit", findings }` and loop.
@@ -136,9 +164,9 @@ are spawned MANY times inside the implement fan-out — those task-scope spawns 
        `{ statePath, planDir, slug, scope: "task", taskId, round }`; fix spawns use
        `fix_target: "qa"` and pass `failures` from the failed run. Skip this gate entirely
        (set `plan.tasks[i].qa = "skipped"` without spawning) when
-       `state.phases["quality-gate"].status === "skipped"` (user picked "skip quality-gate"
-       in preplan). Still `fail` after maxRounds → same `question`.
-     - mark `plan.tasks[i].status = "done"` ONLY when commit is set AND audit is `pass` AND
+       `state.phases["quality-gate"].status === "skipped"` (via `--skip quality-gate`, or user
+       picked "skip quality-gate" in preplan). Still `fail` after maxRounds → same `question`.
+     - mark `plan.tasks[i].status = "done"` ONLY when commit is set AND audit is `pass` (or `skipped` when spec-audit was `--skip`ped) AND
        qa is `pass`/`skipped`. A task whose gate failed and was not retried stays non-done —
        on resume it is re-gated, not re-implemented (unless `--force`).
 - **cycle-scope round loops (phases 4–6):** for `spec-audit` and `quality-gate`, spawn with
@@ -156,6 +184,7 @@ are spawned MANY times inside the implement fan-out — those task-scope spawns 
   minor/nit failures are warnings and do not fail the round (see driver-conventions §5).
 
 - Skip a phase if `state.phases[phase].status === "done"`, unless `params.force` (handled in step 2).
+  A phase with status `"skipped"` (via `params.skip`) is NEVER spawned — `--force` does not un-skip it.
   When resuming a partially gated fan-out, tasks already `done` are skipped; a task with a
   commit but missing/failed gate verdicts gets its gate re-run (not re-implemented).
 - Variant lookup: when spawning phase `p`, if `params.variants[p]` is set, resolve the agent ID

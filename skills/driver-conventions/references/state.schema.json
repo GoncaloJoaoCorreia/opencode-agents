@@ -51,6 +51,11 @@
           "type": "array",
           "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"] }
         },
+        "skip": {
+          "type": "array",
+          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"] },
+          "description": "--skip: phases marked skipped and never spawned (incl. per-task gate spawns). Mutually exclusive with params.phases. On a fresh run preplan/plan may not be skipped; --force never un-skips"
+        },
         "worktree": { "type": "boolean" },
         "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
         "qa": { "type": "string", "description": "--qa override for state.qa.command" },

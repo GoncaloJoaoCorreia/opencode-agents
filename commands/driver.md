@@ -1,5 +1,5 @@
 ---
-description: "Drive a full feature development cycle — /driver <ISSUE-KEY-OR-SPEC> [--phases ...] [--worktree] [--max-rounds N] [--qa \"cmd\"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]"
+description: "Drive a full feature development cycle — /driver <ISSUE-KEY-OR-SPEC> [--phases ...] [--skip ...] [--worktree] [--max-rounds N] [--qa \"cmd\"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]"
 agent: driver
 ---
 
@@ -8,7 +8,9 @@ quality-gate (scope=task) before the next task starts. `--qa-scope scoped` (defa
 manifest `qa.command` in the per-task gate; `--qa-scope full` runs the full QA command per
 task (the cycle-scope run always uses the full command).
 
-Usage: /driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
+Usage: /driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--skip a,b,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
+
+`--skip a,b,...` marks the named phases as skipped (never run, incl. their per-task gates) — mutually exclusive with `--phases`. On a fresh run, `preplan`/`plan` may not be skipped.
 
 Arguments: $ARGUMENTS
 
