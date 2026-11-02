@@ -8,18 +8,6 @@ It currently ships one thing: the **driver** — `/driver` runs an entire featur
 you. Each phase runs as its own subagent with a fresh context window, coordinated through a
 state file, so no single conversation ever has to hold the whole cycle.
 
-```mermaid
-flowchart LR
-    DRV["/driver ABC-123"] --> PRE[preplan] --> PLAN[plan] --> IMP["implement ×N<br/>each task: audit + qa gate"]
-    IMP --> AUD["spec-audit (cycle)"] --> REV[code-review] --> QA["quality-gate (cycle, full)"]
-    QA --> HIST[write-history] --> PR[pr]
-    AUD -. "repair round" .-> IMP
-    REV -. "repair round" .-> IMP
-    QA  -. "repair round" .-> IMP
-
-    style DRV fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-```
-
 ## Contents
 
 - [Quick start](#quick-start)
@@ -86,6 +74,25 @@ Then, from the repo root:
 ```
 
 ## What a run does
+
+```mermaid
+flowchart TD
+    DRV["/driver ABC-123"] --> PRE[preplan] --> PLAN["plan (you approve)"]
+    PLAN --> FAN
+
+    subgraph FAN["implement — one task per commit, gated before the next"]
+        direction TB
+        IMP["implement task"] --> AUDT["spec-audit · task"]
+        AUDT --> QAT["quality-gate · task"]
+        QAT --> NEXT["next task"]
+        NEXT --> IMP
+    end
+
+    FAN --> AUDC["spec-audit · cycle"] --> REV[code-review] --> QAC["quality-gate (full QA)"]
+    QAC --> HIST[write-history] --> PR["pr (push + open)"]
+
+    style DRV fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+```
 
 | Phase | Run standalone | What happens |
 |---|---|---|
