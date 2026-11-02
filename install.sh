@@ -12,10 +12,12 @@
 #
 # Install target: --dest DIR, else ${XDG_CONFIG_HOME:-~/.config}/opencode.
 # The install is COPY-based on purpose (cp -RL): OpenCode's discovery does not follow
-# symlinked agent files, so never symlink agents/ commands/ skills/ into the config dir.
-# Each install writes opencode-agents.version and opencode-agents.manifest into the
-# target; the manifest drives stale-file cleanup on reinstall. Nothing outside
-# agents/ commands/ skills/ and those two meta files is ever touched.
+# symlinked agent files, so never symlink agents/ commands/ skills/ plugins/ into the
+# config dir. Each install writes opencode-agents.version and opencode-agents.manifest
+# into the target; the manifest drives stale-file cleanup on reinstall. Nothing outside
+# agents/ commands/ skills/ plugins/ (unless --no-plugin) and those two meta files is
+# ever touched. plugins/driver-viz is auto-discovered by OpenCode from
+# <config>/plugins/driver-viz/ — no cli.json edit needed.
 set -eu
 unset CDPATH  # keep `cd` output clean when resolving SCRIPT_DIR below
 
@@ -25,27 +27,31 @@ API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
 
 MODE="auto"
 DEST="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+INSTALL_PLUGIN=1
 
 usage() {
   cat <<EOF
 opencode-agents installer
 
-Usage: install.sh [--source|--release] [--dest DIR] [-h|--help]
+Usage: install.sh [--source|--release] [--dest DIR] [--no-plugin] [-h|--help]
 
   --source     install from the local checkout this script lives in (auto-detected
                when .git/ and agents/ sit next to the script)
   --release    download + checksum-verify the latest GitHub release payload, then
                install from it (default when run standalone, e.g. via curl | sh)
   --dest DIR   install target (default: \${XDG_CONFIG_HOME:-~/.config}/opencode)
+  --no-plugin  skip the driver-viz TUI plugin (agents/ commands/ skills/ only);
+               also removes a previously installed copy
 EOF
 }
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --source)  MODE="source" ;;
-    --release) MODE="release" ;;
-    --dest)    DEST="$2"; shift ;;
-    -h|--help) usage; exit 0 ;;
+    --source)    MODE="source" ;;
+    --release)   MODE="release" ;;
+    --dest)      DEST="$2"; shift ;;
+    --no-plugin) INSTALL_PLUGIN=0 ;;
+    -h|--help)   usage; exit 0 ;;
     *) echo "install.sh: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
   shift
@@ -74,7 +80,7 @@ else
 fi
 
 # install_payload <payload-root> <version>
-# payload-root = directory containing agents/ commands/ skills/
+# payload-root = directory containing agents/ commands/ skills/ (plugins/ optional)
 install_payload() {
   payload="$1"
   version="$2"
@@ -85,18 +91,34 @@ install_payload() {
     fi
   done
 
+  # the driver-viz plugin payload is optional (old tarballs predate it); --no-plugin
+  # skips it, and the manifest cleanup below then removes a previously installed copy
+  want_plugins=0
+  if [ "$INSTALL_PLUGIN" = "1" ]; then
+    if [ -d "$payload/plugins" ]; then
+      want_plugins=1
+    else
+      echo "install.sh: payload has no plugins/ — skipping driver-viz (--no-plugin silences this)"
+    fi
+  fi
+
   mkdir -p "$DEST"
   new_list="$DEST/.opencode-agents.manifest.tmp"
   old_manifest="$DEST/opencode-agents.manifest"
 
+  dirs="agents commands skills"
+  if [ "$want_plugins" = "1" ]; then
+    dirs="$dirs plugins"
+  fi
   # -L so symlinked placeholder agents (plan-thorough.md) are listed too
-  (cd "$payload" && find -L agents commands skills -type f | LC_ALL=C sort) > "$new_list"
+  # shellcheck disable=SC2086  # $dirs is an intentional word list
+  (cd "$payload" && find -L $dirs -type f | LC_ALL=C sort) > "$new_list"
 
   # manifest-based clean: remove previously installed files that no longer exist upstream
   if [ -f "$old_manifest" ]; then
     while IFS= read -r f; do
       case "$f" in
-        agents/*|commands/*|skills/*) ;;
+        agents/*|commands/*|skills/*|plugins/*) ;;
         *) continue ;;
       esac
       if ! grep -qxF "$f" "$new_list"; then
@@ -111,10 +133,17 @@ install_payload() {
     # -L dereferences symlinks (plan-thorough.md placeholder) into real installed files
     cp -RL "$payload/$d/." "$DEST/$d/"
   done
+  if [ "$want_plugins" = "1" ]; then
+    mkdir -p "$DEST/plugins"
+    cp -RL "$payload/plugins/." "$DEST/plugins/"
+  fi
 
   mv "$new_list" "$old_manifest"
   printf '%s\n' "$version" > "$DEST/opencode-agents.version"
   echo "installed opencode-agents $version -> $DEST"
+  if [ "$want_plugins" = "1" ]; then
+    echo "driver-viz TUI plugin -> $DEST/plugins/driver-viz (auto-discovered; /driver-viz cycles runs)"
+  fi
 }
 
 source_mode() {
@@ -174,3 +203,5 @@ echo "  1. Make sure the Linear MCP server is configured in your target repo's o
 echo "     \"mcp\": { \"linear-project\": { \"type\": \"remote\", \"url\": \"https://mcp.linear.app/mcp\", \"enabled\": true } }"
 echo "  2. Add '.plan/' to the .gitignore of every repo you run the driver in (snippets/gitignore.txt in this repo)"
 echo "  3. Pick a model/variant with /models — all driver phases inherit the session model"
+echo "  4. The driver-viz sidebar plugin (installed under plugins/, unless --no-plugin) shows the"
+echo "     live phase flow chart of the current /driver run in the TUI sidebar"

@@ -17,10 +17,10 @@ else
 fi
 
 echo "== asset convention files =="
-for f in install.sh agents commands skills snippets; do
+for f in install.sh agents commands skills snippets plugins; do
   [ -e "$f" ] || { echo "FAIL: missing $f" >&2; exit 1; }
 done
-echo "ok: install.sh + agents/ commands/ skills/ snippets/ present"
+echo "ok: install.sh + agents/ commands/ skills/ snippets/ plugins/ present"
 
 command -v ruby >/dev/null 2>&1 || { echo "FAIL: ruby is required for validation" >&2; exit 1; }
 

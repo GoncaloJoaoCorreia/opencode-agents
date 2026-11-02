@@ -1,0 +1,18 @@
+{
+  "name": "opencode-agents-driver-viz",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "TUI-only OpenCode plugin: animated sidebar flow chart of the current driver run (.plan/<slug>/state.json). Auto-discovered when placed in <config>/plugins/driver-viz/.",
+  "exports": {
+    "./tui": "./tui.tsx"
+  },
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  },
+  "peerDependencies": {
+    "@opentui/core": ">=0.6.6",
+    "@opentui/solid": ">=0.6.6",
+    "solid-js": ">=1.9.0"
+  }
+}

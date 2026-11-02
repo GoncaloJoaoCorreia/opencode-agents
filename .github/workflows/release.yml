@@ -36,6 +36,11 @@ jobs:
           ref: main
           fetch-depth: 0
 
+      - name: Install node for driver-viz tests
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22" # validate.sh needs >= 22.18 to strip TS types without a flag
+
       - name: Install validation deps
         run: |
           sudo apt-get update
@@ -43,6 +48,9 @@ jobs:
 
       - name: Validate repository
         run: ./scripts/validate.sh
+
+      - name: Validate driver-viz plugin
+        run: ./scripts/validate-driver-viz.sh
 
       - name: Compute release version
         id: version
@@ -115,7 +123,7 @@ jobs:
           stage_root=$(mktemp -d)
           mkdir -p "$stage_root/opencode-agents"
           # -L dereferences symlinked placeholder agents (plan-thorough.md)
-          cp -RL agents commands skills snippets install.sh LICENSE "$stage_root/opencode-agents/"
+          cp -RL agents commands skills snippets plugins install.sh LICENSE "$stage_root/opencode-agents/"
           tar -czf opencode-agents.tar.gz -C "$stage_root" opencode-agents
           sha256sum opencode-agents.tar.gz > SHA256SUMS
           cat SHA256SUMS
@@ -149,8 +157,10 @@ jobs:
           diff -r "$t/opencode-agents/agents" agents
           diff -r "$t/opencode-agents/commands" commands
           diff -r "$t/opencode-agents/skills" skills
+          diff -r "$t/opencode-agents/plugins" plugins
           # full installer path: download payload, verify checksum, install into temp dir
           sh install.sh --release --dest "$t/cfg"
           test -f "$t/cfg/agents/driver.md"
+          test -f "$t/cfg/plugins/driver-viz/tui.tsx"
           test -f "$t/cfg/opencode-agents.manifest"
           echo "self-test OK: release $tag verifies and installs"

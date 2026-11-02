@@ -2,16 +2,20 @@
 
 [![license](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
 
-A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands and skills.
+A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands, skills —
+and one TUI plugin.
 
-It currently ships one thing: the **driver** — `/driver` runs an entire feature cycle for
+It ships the **driver** — `/driver` runs an entire feature cycle for
 you. Each phase runs as its own subagent with a fresh context window, coordinated through a
-state file, so no single conversation ever has to hold the whole cycle.
+state file, so no single conversation ever has to hold the whole cycle — plus
+**driver-viz**, a sidebar plugin that shows the live phase flow chart of the current run
+(see [Driver sidebar](#driver-sidebar-driver-viz)).
 
 ## Contents
 
 - [Quick start](#quick-start)
 - [What a run does](#what-a-run-does)
+- [Driver sidebar (driver-viz)](#driver-sidebar-driver-viz)
 - [Usage](#usage)
 - [What lands in your repo](#what-lands-in-your-repo)
 - [Requirements & limitations](#requirements--limitations)
@@ -29,8 +33,9 @@ curl -fsSL https://raw.githubusercontent.com/GoncaloJoaoCorreia/opencode-agents/
 
 The installer downloads the latest GitHub release payload (`opencode-agents.tar.gz`),
 verifies it against the release's `SHA256SUMS`, and installs `agents/`, `commands/`,
-`skills/` into `~/.config/opencode/` (or `$XDG_CONFIG_HOME/opencode`). OpenCode reloads
-config automatically — no restart needed.
+`skills/` and `plugins/` into `~/.config/opencode/` (or `$XDG_CONFIG_HOME/opencode`).
+OpenCode reloads config automatically — no restart needed. Pass `--no-plugin` to skip the
+driver-viz sidebar plugin.
 
 Working in a local checkout of this repo? Run `./install.sh` there instead — it detects the
 checkout and installs straight from source (same copy-based install; nothing is built).
@@ -41,8 +46,8 @@ Re-run it after pulling changes.
 
 - **Latest release only.** Each install stamps `opencode-agents.version` and writes
   `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
-  that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`
-  and those two meta files.
+  that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
+  `plugins/` (unless `--no-plugin`) and those two meta files.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -124,6 +129,33 @@ starting over.
 Pre-flight: you must be in a git repo (the session moves to the repo root if needed); a
 dirty working tree pauses the run; on `main`/`master`/`develop`/`dev` the driver creates a
 `feat/<slug>` branch for you.
+
+## Driver sidebar (driver-viz)
+
+The installer also drops a TUI-only plugin into `~/.config/opencode/plugins/driver-viz/`
+(OpenCode auto-discovers it — no extra config; `--no-plugin` skips it). While a `/driver`
+run is active in the repo you're in, the TUI sidebar shows an animated flow chart of the
+run, read live from `.plan/<slug>/state.json`:
+
+```text
+◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2
+✓ Preplan
+┃ Plan            ← pulses while the phase above runs
+⠋ Implement  3/7
+  ●●●○○○          ← per-task dots while implement runs
+▸ Audit
+○ Review
+○ QA
+○ History
+○ PR
+```
+
+`✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase. Worktree
+runs (`--worktree`) show up automatically — the driver moves the session into the worktree.
+With several concurrent runs in one repo, `/driver-viz` (palette: "Driver: show next run")
+cycles through them. The section hides itself in repos without a `.plan/` directory. To
+disable the animation, register the plugin with options in `cli.json`:
+`"plugins": [{ "package": "/abs/path/to/.config/opencode/plugins/driver-viz", "options": { "animate": false } }]`.
 
 ## Usage
 
