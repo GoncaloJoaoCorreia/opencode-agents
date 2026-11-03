@@ -1,0 +1,15 @@
+{
+  "name": "driver-viz-render-test",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Headless render/snapshot tests for the driver-viz TUI plugin (scripts/validate-driver-viz.sh, bun-gated). NOT shipped in the release payload — lives in top-level scripts/ on purpose (see AGENTS.md).",
+  "type": "module",
+  "scripts": {
+    "test": "bun --preload ./preload.ts run.ts"
+  },
+  "devDependencies": {
+    "@opentui/core": "0.8.2",
+    "@opentui/solid": "0.8.2",
+    "solid-js": "1.9.18"
+  }
+}

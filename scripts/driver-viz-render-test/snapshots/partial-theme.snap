@@ -1,0 +1,18 @@
+# scenario: partial-theme (64x26 styled frame: <fg=..;bg=..;attrs>text</>)
+
+<fg=#58a6ff;bg=#00000000;b>◆ DRIVER </><fg=#8b949e;bg=#00000000>TEST-1  ⏱ 3m00s</>
+<fg=#58a6ff;bg=#00000000;b>⠋ </><fg=#e6edf3;bg=#00000000;b>Preplan</>
+<fg=#58a6ff;bg=#00000000>┃</>
+<fg=#58a6ff;bg=#00000000>▸ </><fg=#8b949e;bg=#00000000>Plan</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ Implement</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ Audit</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ Review</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ QA</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ History</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#8b949e;bg=#00000000>○ PR</>

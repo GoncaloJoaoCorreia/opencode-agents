@@ -4,6 +4,8 @@
 # declarations. Used by .github/workflows/release.yml; also runnable locally:
 #   ./scripts/validate-driver-viz.sh
 # Requires: sh, ruby (with psych/yaml + json stdlib), node >= 22.18 (TS logic tests).
+# Optional: bun (render snapshot tests in scripts/driver-viz-render-test/ — CI
+# installs it via setup-bun in test.yml; without bun that section skips).
 # (shellcheck itself is optional — skipped if absent)
 set -eu
 cd "$(dirname "$0")/.."
@@ -69,6 +71,27 @@ failures << "missing #{shot} (regenerate: python3 #{gen})" unless File.exist?(sh
 failures << "missing #{gen}" unless File.exist?(gen)
 failures << "#{gen} must not live under plugins/ (it would ship in the release payload)" if File.exist?("plugins/driver-viz/scripts/screenshot.py")
 
+# invariant: <text> must never nest inside <text> — a TextRenderable is not a valid
+# TextNodeRenderable child (regression: G-21 "[Open Plan]" crashed the sidebar slot
+# with "TextNodeRenderable only accepts strings, TextNodeRenderable instances, or
+# StyledText instances"; use <span onMouseDown> inside <text> instead)
+Dir.glob("plugins/driver-viz/**/*.tsx").each do |f|
+  depth = 0
+  # strip JSX comments first — they may mention tags literally (multi-line comments
+  # are legal JSX, so the match must span newlines)
+  src = File.read(f).gsub(%r{\{/\*.*?\*/\}}m, "")
+  src.scan(%r{</?text\b[^>]*>}).each do |tag|
+    if tag.start_with?("</")
+      depth -= 1
+      failures << "#{f}: unbalanced </text>" if depth.negative?
+    else
+      depth += 1
+      failures << "#{f}: nested <text> inside <text> (invalid in OpenTUI; use <span>)" if depth > 1
+    end
+  end
+  failures << "#{f}: unclosed <text>" unless depth.zero?
+end
+
 if failures.empty?
   puts "ok: driver-viz package, entrypoint, phase-registry sync all valid"
 else
@@ -88,6 +111,21 @@ if node_ok; then
   echo "ok: driver-viz tests (node $(node --version), --test)"
 else
   echo "skip: need node >= 22.18 for driver-viz logic tests (found: $(command -v node >/dev/null 2>&1 && node --version || echo none))"
+fi
+
+echo "== driver-viz render snapshot tests =="
+# Headless render of the real FlowChart.tsx under bun (OpenTUI's native lib is
+# bun-only). Snapshots live in scripts/driver-viz-render-test/snapshots/ — regenerate
+# ONLY after intentional UI changes: UPDATE_SNAPSHOTS=1 bun run test (see AGENTS.md).
+if command -v bun >/dev/null 2>&1; then
+  (
+    cd scripts/driver-viz-render-test
+    bun install --frozen-lockfile
+    bun run test
+  )
+  echo "ok: driver-viz render snapshots (bun $(bun --version))"
+else
+  echo "skip: bun not installed — render snapshot tests skipped (CI installs bun via setup-bun; locally: npm i -g bun, then re-run)"
 fi
 
 echo "== driver-viz all validations passed =="

@@ -1,5 +1,5 @@
 // The sidebar flow chart. Renders one vertical stepper per driver run:
-//   ◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2  ⏱ 12m34s
+//   ◆ DRIVER ABC-123  ⏱ 12m34s  1/2
 //   ✓ Preplan
 //   ✓ Plan   [Open Plan]   <- clickable once the plan phase is done
 //   ┃ Implement  3/7
@@ -206,26 +206,17 @@ export function DriverSection(props: {
         <box flexDirection="column" marginTop={1}>
           <text>
             <span style={{ fg: c().accent, bold: true }}>{"◆ DRIVER "}</span>
-            <span style={{ fg: c().base }}>{r().slug}</span>
-            <Show when={r().state?.branch}>
-              <span style={{ fg: c().muted }}>{"  "}{r().state?.branch}</span>
-            </Show>
-            <Show when={r().state?.pr?.url}>
-              <span style={{ fg: c().success }}>
-                {"  PR #"}
-                {String(r().state?.pr?.number ?? "")}
+            <span style={{ fg: c().muted }}>{r().slug}</span>
+            <Show when={running() >= 0 && elapsedMs() != null}>
+              <span style={{ fg: c().muted }}>
+                {"  ⏱ "}
+                {formatElapsed(elapsedMs() ?? 0)}
               </span>
             </Show>
             <Show when={position().total > 1}>
               <span style={{ fg: c().muted }}>
                 {"  "}
                 {position().idx + 1}/{position().total}
-              </span>
-            </Show>
-            <Show when={running() >= 0 && elapsedMs() != null}>
-              <span style={{ fg: c().muted }}>
-                {"  ⏱ "}
-                {formatElapsed(elapsedMs() ?? 0)}
               </span>
             </Show>
           </text>
@@ -284,9 +275,17 @@ export function DriverSection(props: {
                       </span>
                     </Show>
                     <Show when={phase.id === "plan" && status() === "done"}>
-                      <text onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
-                        <span style={{ fg: c().accent }}>{"  [Open Plan]"}</span>
-                      </text>
+                      {/* span, not text: a <text> is not a valid child of a <text> node.
+                          Padding stays outside the underlined span so the underline
+                          only covers the label, not the leading spaces. */}
+                      <span style={{ fg: c().muted }}>{"  "}</span>
+                      {/* underline only the label — brackets stay plain (nested span
+                          inherits fg, ORs attributes) */}
+                      <span style={{ fg: c().link }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        {"["}
+                        <span style={{ underline: true }}>Open Plan</span>
+                        {"]"}
+                      </span>
                     </Show>
                   </text>
                   <Show
@@ -347,7 +346,12 @@ export function DriverSection(props: {
             {/* [Open report] appears when the driver has written .plan/<slug>/report.md (driver §7) */}
             <Show when={existsSync(reportFilePath(r()))}>
               <text onMouseDown={() => props.onOpenPath(reportFilePath(r()))}>
-                <span style={{ fg: c().accent }}>{"  [Open report]"}</span>
+                <span style={{ fg: c().muted }}>{"  "}</span>
+                <span style={{ fg: c().link }}>
+                  {"["}
+                  <span style={{ underline: true }}>Open report</span>
+                  {"]"}
+                </span>
               </text>
             </Show>
           </Show>

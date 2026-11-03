@@ -50,6 +50,9 @@ export function palette(theme: ThemeLike) {
     warning: color(theme, ["text.feedback.warning.base", "text.feedback.warning.default", "warning"], "#d29922"),
     error: color(theme, ["text.feedback.error.base", "text.feedback.error.default", "error"], "#f85149"),
     border: color(theme, ["border.base", "border"], "#30363d"),
+    // clickable affordances ([Open Plan] / [Open report]): deliberately subtle —
+    // muted foreground, differentiated from normal text by the underline attribute
+    link: color(theme, ["text.link", "link"], "#8b949e"),
   }
 }
 
