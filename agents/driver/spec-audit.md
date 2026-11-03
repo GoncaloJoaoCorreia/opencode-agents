@@ -79,4 +79,4 @@ blocker/major findings, then re-spawns you, up to `params.max_rounds` (default 2
 - A criterion whose command can't run in this environment (missing deps) → status fail with
   severity blocker and evidence "command could not run: <error>" — don't silently pass it.
 - If a task was skipped (status skipped), mark its criteria as "skipped", not fail.
-- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.
+- Validate the `slug` against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use.

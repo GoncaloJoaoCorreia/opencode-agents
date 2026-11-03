@@ -25,6 +25,7 @@ function tmp(): string {
 test("slug regex accepts issue keys, rejects traversal and lowercase", () => {
   assert.ok(SLUG_RE.test("ABC-123"))
   assert.ok(SLUG_RE.test("ENG-1"))
+  assert.ok(SLUG_RE.test("G-17")) // single-letter Linear team key
   assert.ok(!SLUG_RE.test("../evil"))
   assert.ok(!SLUG_RE.test("abc-123"))
   assert.ok(!SLUG_RE.test("ABC-123/../../etc"))
@@ -69,19 +70,22 @@ test("scanRuns keeps only slug dirs, tolerates broken json, sorts by mtime desc"
     const plan = join(root, ".plan")
     mkdirSync(join(plan, "ABC-123"), { recursive: true })
     mkdirSync(join(plan, "XYZ-9"), { recursive: true })
+    mkdirSync(join(plan, "G-17"), { recursive: true }) // single-letter team key — accepted
     mkdirSync(join(plan, "not-a-slug"), { recursive: true }) // ignored
     mkdirSync(join(plan, "low-1"), { recursive: true }) // ignored (lowercase)
     writeFileSync(join(plan, "ABC-123", "state.json"), JSON.stringify({ issue_id: "ABC-123" }))
     writeFileSync(join(plan, "XYZ-9", "state.json"), "{ not json")
+    writeFileSync(join(plan, "G-17", "state.json"), JSON.stringify({ issue_id: "G-17" }))
     // make ABC-123 older than XYZ-9
     const old = new Date(Date.now() - 60_000)
     utimesSync(join(plan, "ABC-123", "state.json"), old, old)
 
     const runs = scanRuns(plan)
-    assert.equal(runs.length, 2)
-    assert.deepEqual(runs.map((r) => r.slug), ["XYZ-9", "ABC-123"]) // most recent first
-    assert.equal(runs[0].state, null) // broken json -> null, not a throw
-    assert.equal(runs[1].state?.issue_id, "ABC-123")
+    assert.equal(runs.length, 3)
+    assert.deepEqual(runs.map((r) => r.slug), ["G-17", "XYZ-9", "ABC-123"]) // most recent first
+    assert.equal(runs[0].state?.issue_id, "G-17")
+    assert.equal(runs[1].state, null) // broken json -> null, not a throw
+    assert.equal(runs[2].state?.issue_id, "ABC-123")
     assert.equal(scanRuns(join(root, ".plan-missing")).length, 0)
   } finally {
     rmSync(root, { recursive: true, force: true })

@@ -33,7 +33,7 @@ yourself — you spawn one `driver/*` subagent per phase and keep this session's
   rounds are loops YOU run.
 - **Spawn phases in the FOREGROUND** (no `background: true`) so the `question` tool works in them.
 - **Never interpolate untrusted text into shell.** Validate the slug against
-  `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
+  `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; quote everything.
 
 ## 1. Parse arguments
 
@@ -44,7 +44,7 @@ dirty-file list. Grammar:
 /driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--skip a,b,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
 ```
 
-- First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]+-[0-9]+$`) or a raw
+- First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]*-[0-9]+$`) or a raw
   spec (pasted text / file path).
 - `--phases a,b,c`: comma-separated subset of the phase registry (below). Default: all.
 - `--skip a,b,c`: comma-separated phases to SKIP — each name must be one of the 8 registry

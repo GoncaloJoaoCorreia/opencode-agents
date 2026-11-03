@@ -12,7 +12,7 @@ exchange. If you change a format here, update the schemas in `references/` too.
 
 - Run `/driver` from the repo root (the driver moves its session there if needed —
   permission rules like `.plan/**` are Location-relative).
-- Slug (= `issue_id`) always matches `^[A-Z][A-Z0-9]+-[0-9]+$`. From a Linear key it is the
+- Slug (= `issue_id`) always matches `^[A-Z][A-Z0-9]*-[0-9]+$`. From a Linear key it is the
   key itself; for a raw spec the driver asks the user for one. **Validate before any path use.**
 - Plan dir is `.plan/<slug>/` at the repo root; `.plan/` is gitignored in the target repo.
 - Dirty tree at start → the driver asks (default: abort).

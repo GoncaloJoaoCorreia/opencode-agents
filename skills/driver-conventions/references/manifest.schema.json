@@ -5,7 +5,7 @@
   "type": "object",
   "required": ["issue_id", "title", "tasks"],
   "properties": {
-    "issue_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "issue_id": { "type": "string", "pattern": "^[A-Z][A-Z0-9]*-[0-9]+$" },
     "title": { "type": "string" },
     "summary": { "type": "string" },
     "risks": { "type": "array", "items": { "type": "string" } },

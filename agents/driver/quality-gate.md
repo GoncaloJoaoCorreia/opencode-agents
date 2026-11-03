@@ -72,5 +72,5 @@ You never edit code — the driver spawns `driver/implement` for repairs in boun
   `.plan/<slug>/` and store its path.
 - In scoped mode, prefer the manifest's scoped `qa.command` (e.g. only the task's test files)
   — never guess a scoped command yourself; if the plan phase didn't declare one, skip.
-- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use. Quote paths;
+- Validate the `slug` against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use. Quote paths;
   never interpolate untrusted text into shell commands.

@@ -74,5 +74,5 @@ scoped to one task (`scope: "task"`, `taskId`).
 
 - If `git commit` fails (nothing staged, missing identity), report the exact error — don't retry blindly.
 - If verification fails and the fix belongs to another task, stop and report; the driver decides.
-- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
+- Validate the `slug` against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; quote everything.
 - Do not modify `.plan/**` beyond the state updates above — plans are the plan phase's artifact.

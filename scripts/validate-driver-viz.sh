@@ -19,7 +19,7 @@ echo "== driver-viz structural checks =="
 command -v ruby >/dev/null 2>&1 || { echo "FAIL: ruby is required for validation" >&2; exit 1; }
 ruby -ryaml -rjson <<'RUBY'
 failures = []
-SLUG_RE = '^[A-Z][A-Z0-9]+-[0-9]+$'
+SLUG_RE = '^[A-Z][A-Z0-9]*-[0-9]+$'
 
 pkg_path = "plugins/driver-viz/package.json"
 if File.exist?(pkg_path)

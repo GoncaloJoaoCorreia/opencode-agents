@@ -43,7 +43,7 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
 ## Steps
 
 1. Load the `driver-conventions` skill — follow its schemas exactly.
-2. **Spec.** If `issueOrSpec` matches `^[A-Z][A-Z0-9]+-[0-9]+$`:
+2. **Spec.** If `issueOrSpec` matches `^[A-Z][A-Z0-9]*-[0-9]+$`:
    - Call the Linear MCP tools (`linear-project_get_issue` with `id` = the key,
      `format: "markdown"`; then `linear-project_list_comments` with the returned issue id).
      Check your actual tool list — names are `<server>_<tool>`.

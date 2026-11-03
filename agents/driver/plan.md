@@ -112,5 +112,5 @@ Do NOT return the full plan text — the driver reads state/files if needed.
   which variant produced the plan.
 - Ask via `question` eagerly (see "Clarifying questions & assumptions") — you run in the
   foreground for exactly this reason.
-- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.
+- Validate the `slug` against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use.
 - Write no code. Touch nothing outside `.plan/**`.

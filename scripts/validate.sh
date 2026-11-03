@@ -81,7 +81,7 @@ Dir.glob("agents/driver/*.md").each do |f|
 end
 
 # content invariants across agents/ + the conventions skill
-SLUG_RE = '^[A-Z][A-Z0-9]+-[0-9]+$'
+SLUG_RE = '^[A-Z][A-Z0-9]*-[0-9]+$'
 content_files = Dir.glob("agents/**/*.md") + Dir.glob("skills/driver-conventions/**/*.md")
 content_files.each do |f|
   src = File.read(f)

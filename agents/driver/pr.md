@@ -81,4 +81,4 @@ Do NOT paste the PR body.
 - You are the only agent allowed to push — never `--force`, never push to the base branch.
 - Uncommitted working-tree changes outside `.plan/` are NOT pushed; note that in the summary.
 - If `gh pr create` fails because a PR already exists, fall back to `gh pr edit`.
-- Validate the slug against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; quote everything.
+- Validate the slug against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; quote everything.

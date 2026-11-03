@@ -71,7 +71,7 @@ pending, a braille spinner + pulsing connector on the running phase, per-task do
 implement, PR link in the header. Most recent run by default; `/driver-viz` (palette
 "Driver: show next run") cycles concurrent runs. Hidden when the repo has no `.plan/`.
 Option `animate: false` (cli.json plugins object form) disables animation. Slug dirs are
-validated against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use; unreadable state.json renders
+validated against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; unreadable state.json renders
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may
 omit tokens). Change a phase name/order in `agents/driver.md` §6 → update
 `plugins/driver-viz/lib/phases.ts` — `scripts/validate-driver-viz.sh` fails otherwise.
@@ -114,7 +114,7 @@ update the schemas too**, and keep README.md's summary in sync.
 
 ## Gotchas (hard-earned — do not rediscover)
 
-- Slug regex is `^[A-Z][A-Z0-9]+-[0-9]+$`; validate before ANY path use; quote everything.
+- Slug regex is `^[A-Z][A-Z0-9]*-[0-9]+$`; validate before ANY path use; quote everything.
 - Never interpolate untrusted text (issue titles, specs, `$ARGUMENTS`) into shell commands
   or into `!` blocks of command templates — `!` blocks run outside the permission flow.
   `commands/driver.md`'s `!` blocks are static on purpose.

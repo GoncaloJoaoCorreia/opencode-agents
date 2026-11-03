@@ -6,7 +6,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { dirname, join } from "node:path"
 
-export const SLUG_RE = /^[A-Z][A-Z0-9]+-[0-9]+$/
+export const SLUG_RE = /^[A-Z][A-Z0-9]*-[0-9]+$/
 
 export type PhaseStatus = "pending" | "running" | "done" | "failed" | "skipped"
 

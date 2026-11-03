@@ -63,4 +63,4 @@ findings, then re-spawns you, up to MAX_ROUNDS (default 2).
 - Match the repo's existing conventions; don't report style nits as majors.
 - Don't re-report findings already fixed in a later commit of the same cycle (mark them
   `fixed` instead — see step 5).
-- Validate the `slug` against `^[A-Z][A-Z0-9]+-[0-9]+$` before any path use.
+- Validate the `slug` against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use.
