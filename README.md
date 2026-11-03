@@ -1,5 +1,7 @@
 # opencode-agents
 
+[![build](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/release.yml/badge.svg)](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/release.yml)
+[![release](https://img.shields.io/github/release/GoncaloJoaoCorreia/opencode-agents?display_name=tag)](https://github.com/GoncaloJoaoCorreia/opencode-agents/releases/latest)
 [![license](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
 
 A personal library of [OpenCode v2](https://opencode.ai/v2/docs/) agents, commands, skills —
