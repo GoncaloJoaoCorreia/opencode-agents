@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, driver-state.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -129,11 +129,11 @@ Refs: <ISSUE-ID>
 - Allowed types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`.
 - One commit per task. Stage only the task's `files` globs. Never push (the `pr` phase owns pushing). No sign-off required.
 - write-history's own commit: `docs(driver): record history/decisions for <ISSUE-ID>`,
-  staging only `agent/...` paths.
+  staging only `.agent/...` paths.
 
 ## 4. History & decisions (write-history phase; committed in the target repo)
 
-- `agent/<module>/history.md` — append-only. Entry template:
+- `<module-dir>/.agent/history.md` — append-only. Entry template:
 
   ```md
   ## 2026-10-30 — ABC-123 — Short title
@@ -142,7 +142,7 @@ Refs: <ISSUE-ID>
   - Plan: `.plan/ABC-123/plan.md`
   ```
 
-- `agent/<module>/decisions.md` — append-only, only for real decisions:
+- `<module-dir>/.agent/decisions.md` — append-only, only for real decisions:
 
   ```md
   ## 2026-10-30 — ABC-123 — Chose X over Y
@@ -153,8 +153,21 @@ Refs: <ISSUE-ID>
   - Consequences: ...
   ```
 
-- Module mapping (confirmed default): first path segment of the changed files under `src/`,
-  else the first segment, else `core`.
+- Repo-root-level changes (commits whose changed files are all at the repo root) go to
+  the repo-root `.agent/history.md` / `.agent/decisions.md`.
+- Module mapping (G-22): run the INSTALLED `agent-scripts/detect-modules.py` (§8) —
+  `detect-modules.py --repo <repoRoot> map <changed-files...>` prints one JSON object
+  mapping each file to its module dir; the LONGEST module dir that is a path-segment
+  prefix of the file wins (files nested inside a module belong to that module), and
+  files at the repo root or under no module map to `"."` (root `.agent/`). The script
+  detects module dirs from the repo's build system, first match wins: Gradle
+  (`settings.gradle(.kts)` includes) → Maven (root `pom.xml` `<modules>`) → npm-family
+  (root `package.json` workspaces / `pnpm-workspace.yaml`) → Cargo (`Cargo.toml`
+  `[workspace]` members); fallback when none matches: the repo's top-level directories
+  (one level deep), plus the directories under a root `src/` when one exists (one
+  extra level, never deeper). This script-driven detection REPLACES the old
+  "first path segment of the changed files under `src/`, else the first segment, else
+  `core`" rule.
 - One history entry per module per cycle (group the cycle's commits), not one per commit.
 
 ## 5. Phase-summary contract (phase → driver)
@@ -185,7 +198,7 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
 - Validate slugs before path use; never interpolate untrusted text (issue titles, spec
   bodies) into shell commands or into `!` blocks of command templates.
 - Only `driver/pr` pushes (PR phase); every other phase never pushes. Only
-  `driver/implement` commits code, only `driver/write-history` commits `agent/` changes.
+  `driver/implement` commits code, only `driver/write-history` commits `.agent/` changes.
 - Phases never spawn subagents (nesting depth is 1) — the driver owns all loops and fan-out.
 - The `question` tool works in foreground children; the driver is interactive-only
   (headless `opencode run` is not supported).
@@ -266,7 +279,8 @@ addresses the scripts at the INSTALLED path — never the repo path:
 SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"
 ```
 
-If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/driver-state.py"` is missing or not executable,
+If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/detect-modules.py"` /
+`"$SCRIPTS/driver-state.py"` is missing or not executable,
 stop with a clear "agent-scripts not installed — re-run install.sh" error. Prerequisites:
 POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
 
@@ -302,6 +316,21 @@ POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
     atomic write (tmp file + rename).
   - Exit codes: `0` ok, `1` = `get` path missing, `2` = misuse / invalid JSON / missing
     file / bad `.plan/<slug>` path — always with a stderr message.
+- **`detect-modules.py`** — module detection + file→module mapping; the MECHANISM behind
+  the §4 history layout (write-history calls it — agents must NOT re-implement the
+  detection inline). python3 stdlib only. Invocation:
+  `"$SCRIPTS/detect-modules.py" [--repo DIR] modules` and
+  `"$SCRIPTS/detect-modules.py" [--repo DIR] map FILE...`
+  - Prints exactly ONE JSON object (one line) on stdout:
+    `modules` → `{ "repo": "<abs path>", "build_system": "gradle|maven|npm|cargo|fallback", "modules": [ { "name": "<dir>", "dir": "<dir>" }, ... ] }`;
+    `map` → `{ "<file repo-relative>": "<module dir or .>" }` — the longest module-dir
+    prefix wins, `"."` = repo root / under no module dir. FILEs may be repo-relative or
+    absolute; files outside the repo are an error.
+  - Build-system detection, first match wins: Gradle → Maven → npm-family → Cargo;
+    fallback = top-level dirs plus `src/*` when a root `src/` exists (never deeper).
+  - Exit codes: `0` = one JSON object on stdout; `2` = error (bad flag, unreadable repo,
+    file outside repo) with a message on stderr and EMPTY stdout. `--help` → usage on
+    stdout, exit 0.
 - **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
   `driver-state.py merge "$statePath" patch.json`,
   `driver-state.py push "$statePath" implement.runs "$entryJson"`,

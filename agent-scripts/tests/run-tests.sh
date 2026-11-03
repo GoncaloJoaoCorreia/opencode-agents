@@ -15,6 +15,8 @@ sh -n "$ROOT/detect-forge.sh"
 echo "ok: sh -n detect-forge.sh"
 python3 -m py_compile "$ROOT/driver-state.py"
 echo "ok: py_compile driver-state.py"
+python3 -m py_compile "$ROOT/detect-modules.py"
+echo "ok: py_compile detect-modules.py"
 
 echo "== detect-forge tests =="
 sh "$HERE/test-detect-forge.sh"
@@ -23,5 +25,9 @@ echo "ok: detect-forge tests"
 echo "== driver-state tests =="
 python3 "$HERE/test-driver-state.py"
 echo "ok: driver-state tests"
+
+echo "== detect-modules tests =="
+python3 "$HERE/test-detect-modules.py"
+echo "ok: detect-modules tests"
 
 echo "== all agent-scripts tests passed =="
