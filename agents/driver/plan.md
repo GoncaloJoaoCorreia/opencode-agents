@@ -40,6 +40,26 @@ permissions:
    - `source: "linear"` → re-fetch via the Linear MCP read tools
      (`linear-project_get_issue` with `id` = key, `format: "markdown"`, then
      `linear-project_list_comments`). Check your actual tool list for exact names.
+     Then refresh the persisted copy + attachments, idempotently (G-23) —
+     `planDir=".plan/<slug>"` (same as `$(dirname "$statePath")`):
+     regenerate `$planDir/issue.md` (description + comments, via the edit tool —
+     `.plan/**` is allowed; never via shell interpolation of issue text) and
+     `$planDir/attachment-urls.json` (`issue.attachments[]` url/title pairs for
+     `--urls-file`), then re-run the installed script — define the scripts dir
+     defensively and fail clearly when missing, exactly like preplan step 2:
+     `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`; if
+     `[ ! -x "$SCRIPTS/save-linear-attachments.py" ]`, stop with "agent-scripts not
+     installed — re-run install.sh". Run
+     `"$SCRIPTS/save-linear-attachments.py" --markdown "$planDir/issue.md" --out "$planDir/attachments" --spec-out "$planDir/spec.md" --urls-file "$planDir/attachment-urls.json"`
+     (quote everything) and capture the single-line JSON stdout; on a non-zero exit,
+     surface the script's stderr + exit code and stop. Already-downloaded files in
+     `attachments/` are reused (skip-if-exists), while `spec.md` is regenerated from the
+     fresh fetch because old signatures expire. Merge `spec.spec_file` +
+     `spec.attachments[]` again exactly like preplan step 2 (patch file under
+     `.plan/<slug>/` built from the captured stdout by a python3-stdlib snippet that
+     passes only file paths, then `driver-state.py merge`; one `state.warnings` push per
+     `failed[]` entry). Then read the spec from `$planDir/spec.md` — downloaded
+     attachments are local `attachments/...` links, failures keep the original URL.
    - `source: "prompt"` → read `state.spec.spec_file` (`.plan/<slug>/spec.md`).
    - `source: "file"` → read `state.spec.ref`.
 3. **Explore the codebase** enough to plan concretely: `AGENTS.md`/`CONTRIBUTING.md`, module

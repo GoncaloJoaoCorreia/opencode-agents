@@ -54,12 +54,14 @@ Re-run it after pulling changes.
   that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
   `agent-scripts/`, `plugins/` (unless `--no-plugin`) and those two meta files.
 - **Driver helper scripts.** `agent-scripts/` installs to
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the three scripts
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the four scripts
   the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
   mirroring `skills/driver-conventions/SKILL.md` §7.1), `detect-modules.py` (module
-  detection + file→module mapping for the write-history phase, §4/§8) and `driver-state.py`
-  (atomic, merge-never-clobber access to `.plan/<slug>/state.json`). See
-  `agent-scripts/README.md` in this repo for their contracts.
+  detection + file→module mapping for the write-history phase, §4/§8), `driver-state.py`
+  (atomic, merge-never-clobber access to `.plan/<slug>/state.json`) and
+  `save-linear-attachments.py` (eager download of a Linear issue's attachments at
+  spec-fetch time — preplan/plan persist `.plan/<slug>/spec.md` with local links, G-23).
+  See `agent-scripts/README.md` in this repo for their contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -207,8 +209,10 @@ disable the animation, register the plugin with options in `cli.json`:
 
 ## What lands in your repo
 
-- **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md`,
-  `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`, `audit-round-<n>.md` (audit evidence),
+- **`.plan/<slug>/`** — scratch, gitignored: `state.json` (cycle state), `spec.md` (raw
+  spec — also written for Linear issues, with downloaded attachments rewritten to local
+  links), `attachments/` (eagerly downloaded Linear issue attachments), `plan.md`,
+  `manifest.json`, `tasks/*.md`, `qa.log`, `audit-round-<n>.md` (audit evidence),
   `pr-body.md` (PR description draft), plus per-task gate artifacts `audit-<task>-round-<n>.md` and `qa-<task>-round-<n>.log`.
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
