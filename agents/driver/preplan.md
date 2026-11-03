@@ -73,42 +73,48 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
      Store the choice in `state.qa.command` (and `state.qa.candidates`). Choosing
      "skip quality-gate" also sets `phases["quality-gate"].status = "skipped"` immediately,
      so the driver does not have to infer it.
-4. **Forge detection + cache** (fills `state.remote`; the pr phase consumes it — see
-   driver-conventions §7 for the full contract). Precedence, first match wins:
-   - `params.forge` is a concrete forge (`github`/`gitlab`/`forgejo`, i.e. the `--forge`
-     flag was passed and is not `auto`) → use it with `source: "flag"`, and PERSIST it:
-     `git config driver.forge <forge>` (repo-local config — never committed, shared
-     across linked worktrees by default, so the forge is detected once per clone).
-   - Else `git config --get driver.forge` returns a known forge → use it with
-     `source: "cache"`. No probing, no CLI auth needed.
-   - Else probe (only reached when `--forge auto` or no cache):
-     - `url=$(git remote get-url origin)`; parse the host from https
-       (`https://host/owner/repo[.git]`, also `https://user@host/...`) and ssh forms
-       (`git@host:owner/repo.git`, `ssh://git@host/...`).
-     - Known SaaS hosts map directly: `github.com` → `github`, `gitlab.com` → `gitlab`,
-       `codeberg.org` → `forgejo`.
-     - Custom host: probe the installed CLIs in order glab → forgejo-cli → gh; the first
-       one that is installed, authenticated, AND answers its user API identifies the
-       forge (a probe against the wrong forge fails fast):
-       - glab: `glab auth status` && `glab api user`
-       - forgejo-cli (binary `forgejo-cli` or `fj`): `<bin> auth status` && `<bin> api user`
-       - gh: `gh auth status` && `gh api user`
-     - On success: `git config driver.forge <forge>` and `source: "probe"`.
-     - On failure: `forge: "unknown"`, `source: "probe"`, plus a warning
-       ("could not identify the forge of <host> — pass --forge, or authenticate the
-       matching CLI; the pr phase will skip"). Do NOT cache the failure, so a later
-       `glab auth login` etc. fixes it on the next run without `--forge`.
-   - CLI for the winning forge: `command -v gh` / `command -v glab` /
-     `command -v forgejo-cli` / `command -v fj` → `cli: "gh" | "glab" | "fj" | null`
-     (`fj` = forgejo-cli, whichever binary name exists).
-   - Record `state.remote = { url, host, forge, cli, source }`. `git config` is a shell
-     call, not a file edit — you may still NOT edit files outside `.plan/**`.
+4. **Forge detection + cache** (fills `state.remote`; the pr phase consumes it).
+   Semantics: driver-conventions §7.1 — the MECHANISM is the installed script
+   `agent-scripts/detect-forge.sh` (driver-conventions §8); do NOT re-implement the
+   detection inline. Define the scripts dir defensively and fail clearly when missing:
+   `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"` — if
+   `[ ! -x "$SCRIPTS/detect-forge.sh" ]`, stop with "agent-scripts not installed — re-run
+   install.sh".
+   - Run `"$SCRIPTS/detect-forge.sh" --repo "$repoRoot"`, plus `--forge "$params.forge"`
+     when `params.forge` is a concrete forge (not `auto`) — the script itself persists the
+     flag to repo-local `git config driver.forge`. Flag → cache → probe precedence, the
+     known-host map, the glab → forgejo-cli/fj → gh probe order, the CLI resolution and
+     cache-only-successes are all INSIDE the script (§7.1 semantics).
+   - Capture the single JSON object on stdout:
+     `{ "url", "host", "forge", "cli", "source" }`. On a non-zero exit, surface the
+     script's stderr and exit code to the driver and stop — never swallow them
+     (exit 0 with `forge: "unknown"` is a valid result; exit 2 is an error with empty
+     stdout and a diagnostic on stderr).
+   - Merge the result into `state.remote` via `driver-state.py` (§8): the script's stdout
+     is pure single-line JSON, so
+     `printf '{"remote": %s}\n' "$json" > "$(dirname "$statePath")/remote.patch.json"` is
+     safe, then
+     `"$SCRIPTS/driver-state.py" merge "$statePath" "$(dirname "$statePath")/remote.patch.json"`.
+     Quote everything.
+   - Failure-warning behavior: when the returned `forge` is `"unknown"`, append a warning
+     to `state.warnings` via `driver-state.py push "$statePath" warnings '<json-string>'`
+     (a single-quoted JSON literal — no interpolation; the script printed the host on
+     stderr): "could not identify the forge of the origin host — pass --forge, or
+     authenticate the matching CLI; the pr phase will skip". The script does NOT cache
+     failures, so a later `glab auth login` etc. fixes the next run without `--forge`.
+   - You may still NOT edit files outside `.plan/**` (the `git config` writes happen
+     inside the script).
 5. **`.gitignore` check:** read the repo-root `.gitignore`. If it has no `.plan/` entry, append
    `".plan/ is not gitignored in this repo — add it (see the driver's snippets/gitignore.txt)"`
    to `state.warnings` — but ONLY if that exact string is not already present (dedupe on re-runs).
    You may NOT edit files outside `.plan/**`.
-6. Merge everything into `state.json` (never clobber existing fields):
-   `spec`, `qa`, `remote`, `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`.
+6. Merge everything into `state.json` (never clobber existing fields) via the installed
+   `driver-state.py` (driver-conventions §8): write the patch (`spec`, `qa`, `remote`,
+   `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`) to a JSON
+   file under `.plan/<slug>/` and run
+   `"$SCRIPTS/driver-state.py" merge "$statePath" <patch.json>` — or use `set`/`push` for
+   individual paths. Hand-editing is only the documented fallback when the installed
+   scripts are missing (old install).
 
 ## Output contract (to the driver)
 

@@ -52,7 +52,9 @@ round and re-runs you.
      command output) to `.plan/<slug>/audit-<taskId>-round-<round>.md` (task scope) or
      `.plan/<slug>/audit-round-<round>.md` (cycle scope); in state keep only the
      `evidence_ref` path per finding. State stays small.
-3. Write to `state.json` (merge, never clobber):
+3. Write to `state.json` via the installed `driver-state.py` (driver-conventions §8 —
+   merge, never clobber; e.g. `"$SCRIPTS/driver-state.py" push "$statePath" audit.rounds
+   "$roundJson"` with `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`):
    - append `state.audit.rounds[] += { scope, task_id?, round, findings, verdict, evidence_file }`
      (round is 1-based per (scope, taskId));
    - verdict per round — **fail iff any finding with `status: "fail"` has severity `blocker`

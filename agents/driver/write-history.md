@@ -42,7 +42,10 @@ else `core`.
 4. Commit the history changes: `git add agent/...` (only those paths) then
    `git commit -m "docs(driver): record history/decisions for <ISSUE-ID>"`.
    NEVER push (only the pr phase pushes). If there is nothing to commit (no entries), skip the commit.
-5. Update `state.json`: `phases["write-history"] = { status: "done", summary }`,
+5. Update `state.json` via the installed `driver-state.py`
+   (`SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`, driver-conventions
+   §8 — `set`/`push`/`merge`, never clobber; hand-editing only as the documented fallback
+   when the scripts are missing): `phases["write-history"] = { status: "done", summary }`,
    `history.entries[] = [{ module, history_file, decision_file, commit }]`, and record the
    docs commit SHA.
 

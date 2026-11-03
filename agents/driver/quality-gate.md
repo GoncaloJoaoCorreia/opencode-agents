@@ -49,7 +49,9 @@ You never edit code — the driver spawns `driver/implement` for repairs in boun
    `.plan/<slug>/qa-<taskId>-round-<round>.log` (task scope).
 4. On failure, extract the actionable failures (failing tests, lint errors, build errors)
    into a `failures[]` array in the shape `{ title, file?, line?, excerpt }`.
-5. Write to `state.json` (merge, never clobber):
+5. Write to `state.json` via the installed `driver-state.py` (driver-conventions §8 —
+   merge, never clobber; e.g. `"$SCRIPTS/driver-state.py" push "$statePath" qa.runs
+   "$runJson"`):
    - **task scope:** append `state.qa.runs[] += { scope: "task", task_id, round, command,
      verdict, exit_code, log, failures? }` where `verdict = "pass" | "fail" | "skipped"`,
      and set `plan.tasks[<taskId>].qa = verdict`. DO NOT touch the top-level `state.qa.*`

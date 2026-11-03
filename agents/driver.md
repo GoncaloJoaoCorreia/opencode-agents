@@ -34,6 +34,12 @@ yourself — you spawn one `driver/*` subagent per phase and keep this session's
 - **Spawn phases in the FOREGROUND** (no `background: true`) so the `question` tool works in them.
 - **Never interpolate untrusted text into shell.** Validate the slug against
   `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; quote everything.
+- **State via scripts.** Define `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`
+  (installed payload — driver-conventions §8; stop with "agent-scripts not installed —
+  re-run install.sh" when the scripts are missing). Every `.plan/<slug>/state.json` update
+  goes through `"$SCRIPTS/driver-state.py"` (`get`/`set`/`push`/`merge`), never by hand —
+  merges stay atomic and slug-validated. Hand-editing is only the fallback for old installs
+  without the scripts.
 
 ## 1. Parse arguments
 
@@ -118,7 +124,10 @@ Record `state.worktree = { directory }`.
 
 Create `.plan/<slug>/state.json` per the `driver-conventions` schema:
 `{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, skip, worktree, qa_scope, forge }, phases: { <each>: { status: "pending" } } }`.
-If it exists, merge — never clobber.
+Write it with `"$SCRIPTS/driver-state.py"` (see golden rules / driver-conventions §8):
+create the skeleton file, then apply the fields with `set`/`merge` (e.g.
+`"$SCRIPTS/driver-state.py" set "$statePath" phases.preplan.status '"pending"'`).
+If it exists, `merge` a patch — never clobber.
 
 ## 6. Spawn phases (registry order)
 
@@ -136,7 +145,10 @@ If it exists, merge — never clobber.
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
 `description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,
 params }. Then write the returned short summary into `state.phases[phase]`
-({ status, summary, completed_at }). NOTE: in per-task gating mode spec-audit/quality-gate
+({ status, summary, completed_at }) with `"$SCRIPTS/driver-state.py" set ...` — every state
+write in this step and the fan-out below (phase summaries, task commits, gate verdicts,
+skips) goes through `driver-state.py` (`set`/`push`/`merge`), never by hand
+(driver-conventions §8). NOTE: in per-task gating mode spec-audit/quality-gate
 are spawned MANY times inside the implement fan-out — those task-scope spawns do NOT set
 `phases[...]` status; only the cycle-scope spawns in registry order do.
 

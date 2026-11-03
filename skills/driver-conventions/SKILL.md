@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, driver-state.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -52,7 +52,8 @@ exchange. If you change a format here, update the schemas in `references/` too.
 Written by the driver (initial skeleton), filled by preplan, read+updated by every phase.
 Schema: `references/state.schema.json`. Key rules:
 
-- Never delete information — append/merge. Re-runs resume from this file.
+- Never delete information — append/merge (every update goes through the installed
+  `driver-state.py` — see §8). Re-runs resume from this file.
 - Summaries are SHORT (a few lines). Big content lives in files under `.plan/<slug>/`
   (`spec.md`, `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`,
   `audit-round-<n>.md`), referenced by path — never inline evidence or log tails beyond a
@@ -214,6 +215,9 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
   `git config --unset driver.forge`.
 - The pr phase re-derives the forge when `state.remote` is missing (resume with preplan
   skipped): `state.remote.forge` → `params.forge` → `git config driver.forge` → host map.
+- Mechanism: preplan and pr do NOT implement the detection inline — they call the installed
+  `agent-scripts/detect-forge.sh` and merge its JSON into `state.remote` (see §8).
+  §7.1 above remains the SEMANTICS (the contract); §8 is the MECHANISM.
 
 ### 7.2 PR/MR conventions (pr phase)
 
@@ -252,3 +256,59 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
 - Unknown forge, or the forge's CLI missing/unauthenticated → mark the phase
   `skipped`/`failed` with a clear summary; never push anywhere else.
 - Record `state.pr = { number, url, base, head, title, draft, forge, cli }` in `state.json`.
+
+## 8. Agent scripts (installed payload — the mechanism behind §1 state writes and §7.1 forge detection)
+
+`install.sh` ships the repo's `agent-scripts/` directory into the config dir, so every phase
+addresses the scripts at the INSTALLED path — never the repo path:
+
+```sh
+SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"
+```
+
+If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/driver-state.py"` is missing or not executable,
+stop with a clear "agent-scripts not installed — re-run install.sh" error. Prerequisites:
+POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
+
+- **`detect-forge.sh`** — forge detection. §7.1 stays the SEMANTICS (the contract); this
+  script is the MECHANISM. Invocation:
+  `"$SCRIPTS/detect-forge.sh" --repo "$repoRoot" [--forge github|gitlab|forgejo] [--remote-url URL] [--no-cache]`
+  - Prints exactly ONE JSON object on stdout:
+    `{ "url": "...", "host": "...", "forge": "github|gitlab|forgejo|unknown", "cli": "gh|glab|fj|null", "source": "flag|cache|probe" }`.
+  - Flags: `--forge <concrete>` (source=flag; the script persists it to repo-local
+    `git config driver.forge` itself), `--remote-url <url>` (testability), `--repo <dir>`,
+    `--no-cache` (neither read nor write the cache), `--help`.
+  - Exit codes: `0` = JSON on stdout (`forge` may be `"unknown"` — a valid result);
+    `2` = error (unknown flag, not a git repo, no origin remote) with a message on stderr
+    and EMPTY stdout.
+  - Precedence flag → cache → probe, the known-host map (github.com/gitlab.com/codeberg.org),
+    the glab → forgejo-cli/fj → gh probe order, the CLI resolution and cache-only-successes
+    are all implemented INSIDE the script (§7.1 parity). Agents call it and merge the JSON
+    into `state.remote` — wrap the captured stdout
+    (`printf '{"remote": %s}\n' "$json" > patch.json`, then `driver-state.py merge`) — and
+    must NOT re-implement the detection inline.
+- **`driver-state.py`** — safe, atomic `.plan/<slug>/state.json` access; the MECHANISM for
+  the §1 merge/never-clobber contract. Subcommands (state file path first; a path matching
+  `.plan/<segment>/state.json` is rejected unless `<segment>` matches the slug regex
+  `^[A-Z][A-Z0-9]*-[0-9]+$`):
+  - `validate <slug> <state.json>` — slug regex + required top-level keys; prints `ok`, exit 0.
+  - `get <state.json> <dot.path>` — print the JSON value at the dotted path (numeric
+    segments index arrays, e.g. `plan.tasks.0.id`); exit 1 when missing.
+  - `set <state.json> <dot.path> <json>` — deep-set a JSON-parsed value (creates
+    intermediate objects); atomic write.
+  - `push <state.json> <dot.path> <json>` — append one JSON element to the array at the path.
+  - `merge <state.json> <patch.json>` — deep-merge a patch FILE: objects merge recursively,
+    any non-object value (scalar, array) REPLACES the target, keys are NEVER deleted;
+    atomic write (tmp file + rename).
+  - Exit codes: `0` ok, `1` = `get` path missing, `2` = misuse / invalid JSON / missing
+    file / bad `.plan/<slug>` path — always with a stderr message.
+- **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
+  `driver-state.py merge "$statePath" patch.json`,
+  `driver-state.py push "$statePath" implement.runs "$entryJson"`,
+  `driver-state.py set "$statePath" phases.implement.status '"done"'`.
+  Pass JSON values as SINGLE-QUOTED arguments — never interpolate untrusted text into a
+  shell command; write patch objects to a temp file under `.plan/<slug>/` for `merge`.
+  Hand-editing `state.json` is only a documented FALLBACK when the installed scripts are
+  missing (old install) — and even then the slug regex + §1 schema must hold.
+- **Error handling rule:** the scripts' stderr and exit codes must be surfaced to the
+  driver/user, never swallowed; stdout JSON is safe to consume.
