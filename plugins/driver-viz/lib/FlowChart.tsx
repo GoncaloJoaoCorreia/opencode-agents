@@ -1,5 +1,5 @@
 // The sidebar flow chart. Renders one vertical stepper per driver run:
-//   ◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2  ⏱ 12m34s
+//   ◆ DRIVER ABC-123  ⏱ 12m34s  1/2
 //   ✓ Preplan
 //   ✓ Plan   [Open Plan]   <- clickable once the plan phase is done
 //   ┃ Implement  3/7
@@ -206,26 +206,17 @@ export function DriverSection(props: {
         <box flexDirection="column" marginTop={1}>
           <text>
             <span style={{ fg: c().accent, bold: true }}>{"◆ DRIVER "}</span>
-            <span style={{ fg: c().base }}>{r().slug}</span>
-            <Show when={r().state?.branch}>
-              <span style={{ fg: c().muted }}>{"  "}{r().state?.branch}</span>
-            </Show>
-            <Show when={r().state?.pr?.url}>
-              <span style={{ fg: c().success }}>
-                {"  PR #"}
-                {String(r().state?.pr?.number ?? "")}
+            <span style={{ fg: c().muted }}>{r().slug}</span>
+            <Show when={running() >= 0 && elapsedMs() != null}>
+              <span style={{ fg: c().muted }}>
+                {"  ⏱ "}
+                {formatElapsed(elapsedMs() ?? 0)}
               </span>
             </Show>
             <Show when={position().total > 1}>
               <span style={{ fg: c().muted }}>
                 {"  "}
                 {position().idx + 1}/{position().total}
-              </span>
-            </Show>
-            <Show when={running() >= 0 && elapsedMs() != null}>
-              <span style={{ fg: c().muted }}>
-                {"  ⏱ "}
-                {formatElapsed(elapsedMs() ?? 0)}
               </span>
             </Show>
           </text>

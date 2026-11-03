@@ -1,6 +1,6 @@
 # scenario: partial-theme (64x26 styled frame: <fg=..;bg=..;attrs>text</>)
 
-<fg=#58a6ff;bg=#00000000;b>◆ DRIVER </><fg=#e6edf3;bg=#00000000>TEST-1</><fg=#8b949e;bg=#00000000>  feat/TEST-1  ⏱ 3m00s</>
+<fg=#58a6ff;bg=#00000000;b>◆ DRIVER </><fg=#8b949e;bg=#00000000>TEST-1  ⏱ 3m00s</>
 <fg=#58a6ff;bg=#00000000;b>⠋ </><fg=#e6edf3;bg=#00000000;b>Preplan</>
 <fg=#58a6ff;bg=#00000000>┃</>
 <fg=#58a6ff;bg=#00000000>▸ </><fg=#8b949e;bg=#00000000>Plan</>

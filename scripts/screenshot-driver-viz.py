@@ -68,7 +68,7 @@ LINES = [
     [("▼ MCP", MUTED, False)],
     [("  • linear-project", MUTED, False), ("   Connected", SUCCESS, False)],
     [("", BASE, False)],
-    [("◆ DRIVER ", ACCENT, True), ("ABC-123", BASE, True), ("  feat/ABC-123", MUTED, False), ("  1/2", MUTED, False)],
+    [("◆ DRIVER ", ACCENT, True), ("ABC-123", MUTED, False), ("  ⏱ 12m34s", MUTED, False), ("  1/2", MUTED, False)],
     [("✓ ", SUCCESS, False), ("Preplan", BASE, False)],
     [("│", BORDER, False)],
     [("✓ ", SUCCESS, False), ("Plan", BASE, False), ("  ", MUTED, False), ("[Open Plan]", MUTED, False, True)],
