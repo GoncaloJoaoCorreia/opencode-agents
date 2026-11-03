@@ -169,8 +169,6 @@ Refs: <ISSUE-ID>
   "first path segment of the changed files under `src/`, else the first segment, else
   `core`" rule.
 - One history entry per module per cycle (group the cycle's commits), not one per commit.
-- Legacy root-level `agent/` history folders in target repos (from older cycles) are
-  left untouched — append-only there too, no migration.
 
 ## 5. Phase-summary contract (phase → driver)
 

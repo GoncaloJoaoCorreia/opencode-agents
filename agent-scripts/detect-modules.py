@@ -384,7 +384,8 @@ def map_files(repo, module_dirs, files):
 
 def build_parser():
     common = argparse.ArgumentParser(add_help=False)
-    # SUPPRESS so a subcommand-level --repo doesn't clobber the main one
+    # default=SUPPRESS: an unset subcommand-level --repo leaves the main-level value
+    # intact; if --repo is given at both levels, the subcommand's value wins
     common.add_argument("--repo", metavar="DIR", default=argparse.SUPPRESS,
                         help="target repo root (default: cwd)")
     ap = argparse.ArgumentParser(

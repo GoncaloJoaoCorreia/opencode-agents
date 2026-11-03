@@ -18,8 +18,7 @@ permissions:
 
 Append this cycle's boundary history and important decisions to the per-module
 `.agent/` folders, then commit those changes. You may edit ONLY `.agent/**` and
-`.plan/**`. Append — never rewrite existing entries. Legacy root-level `agent/`
-history folders (from older cycles) are left untouched — never edit or migrate them.
+`.plan/**`. Append — never rewrite existing entries.
 
 ## Inputs (from the driver's prompt)
 
@@ -46,7 +45,8 @@ Module dirs come from the INSTALLED agent script
 
 1. Load the `driver-conventions` skill (exact entry templates).
 2. Group this cycle's commits (`state.plan.tasks[].commit`) by module dir via
-   `git show --stat` + the `map` call above. Files mapping to `.` → repo-root `.agent/`.
+   `git show --stat` + the `map` call above. Files mapping to `.` → repo-root `.agent/`
+   (module name `root` in the history entry).
 3. For each module dir, append to `<module-dir>/.agent/history.md`:
    `## <ISO date> — <ISSUE-ID> — <title>` + bullets: what changed, commit SHAs, plan path.
    Append to `<module-dir>/.agent/decisions.md` ONLY for real decisions (from plan risks
@@ -54,8 +54,8 @@ Module dirs come from the INSTALLED agent script
    Create dirs/files if missing. One history entry per module per cycle (group the commits).
 4. Commit the history changes: `git add` ONLY the touched `.agent/...` paths, then
    `git commit -m "docs(driver): record history/decisions for <ISSUE-ID>"`.
-   NEVER push (only the pr phase pushes). Never stage anything outside `.agent/`;
-   never touch legacy `agent/`. If there is nothing to commit (no entries), skip the commit.
+   NEVER push (only the pr phase pushes). Never stage anything outside `.agent/`.
+   If there is nothing to commit (no entries), skip the commit.
 5. Update `state.json` via the installed `driver-state.py`
    (`SCRIPTS` as above, driver-conventions §8 — `set`/`push`/`merge`, never clobber;
    hand-editing only as the documented fallback when the scripts are missing):

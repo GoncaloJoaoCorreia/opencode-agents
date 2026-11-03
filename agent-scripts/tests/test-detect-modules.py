@@ -356,5 +356,25 @@ class TestModulesOutputShape(RepoTestCase):
         self.assertEqual(out["modules"], [{"name": "module1", "dir": "module1"}])
 
 
+class TestRepoFlagPrecedence(RepoTestCase):
+    def test_main_level_repo_used_when_sub_level_unset(self):
+        self.mkdir("module1")
+        out = run("--repo", self.repo, "modules")
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(json.loads(out.stdout)["repo"], os.path.abspath(self.repo))
+
+    def test_sub_level_repo_wins_when_both_given(self):
+        # pins argparse behavior: last occurrence wins, so the subcommand's --repo
+        # overrides the main-level one when both are present
+        self.mkdir("module1")
+        with tempfile.TemporaryDirectory() as other:
+            os.makedirs(os.path.join(other, "othermod"))
+            r = run("--repo", self.repo, "modules", "--repo", other)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            out = json.loads(r.stdout)
+            self.assertEqual(out["repo"], os.path.abspath(other))
+            self.assertEqual(out["modules"], [{"name": "othermod", "dir": "othermod"}])
+
+
 if __name__ == "__main__":
     unittest.main()
