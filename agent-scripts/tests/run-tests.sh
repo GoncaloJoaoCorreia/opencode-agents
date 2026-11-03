@@ -1,5 +1,5 @@
 #!/bin/sh
-# Runs the agent-scripts unit suites plus syntax checks for both scripts.
+# Runs the agent-scripts unit suites plus syntax checks for all scripts.
 # Hard prerequisites (fail loudly when absent): POSIX sh, git, python3.
 # Usage (from the repo root): sh agent-scripts/tests/run-tests.sh
 set -eu
@@ -17,6 +17,8 @@ python3 -m py_compile "$ROOT/driver-state.py"
 echo "ok: py_compile driver-state.py"
 python3 -m py_compile "$ROOT/detect-modules.py"
 echo "ok: py_compile detect-modules.py"
+python3 -m py_compile "$ROOT/save-linear-attachments.py"
+echo "ok: py_compile save-linear-attachments.py"
 
 echo "== detect-forge tests =="
 sh "$HERE/test-detect-forge.sh"
@@ -29,5 +31,9 @@ echo "ok: driver-state tests"
 echo "== detect-modules tests =="
 python3 "$HERE/test-detect-modules.py"
 echo "ok: detect-modules tests"
+
+echo "== save-linear-attachments tests =="
+python3 "$HERE/test-save-linear-attachments.py"
+echo "ok: save-linear-attachments tests"
 
 echo "== all agent-scripts tests passed =="
