@@ -1,0 +1,19 @@
+# scenario: mid-run (64x26 char frame)
+
+◆ DRIVER TEST-1  feat/TEST-1  1/2  ⏱ 30m00s
+✓ Preplan
+│
+✓ Plan  [Open Plan]
+│
+⠋ Implement  2/4
+  ●⠋⊘✗
+┃
+▸ Audit
+│
+○ Review
+│
+○ QA
+│
+○ History
+│
+○ PR

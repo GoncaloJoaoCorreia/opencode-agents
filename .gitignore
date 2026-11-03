@@ -4,3 +4,6 @@
 
 # Python bytecode from agent-scripts/
 __pycache__/
+
+# driver-viz render-test harness deps (bun.lock IS committed; node_modules is not)
+scripts/driver-viz-render-test/node_modules/

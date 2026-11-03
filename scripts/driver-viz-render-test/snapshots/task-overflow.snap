@@ -1,0 +1,19 @@
+# scenario: task-overflow (64x26 char frame)
+
+◆ DRIVER TEST-1  ⏱ 10m00s
+✓ Preplan
+│
+✓ Plan  [Open Plan]
+│
+⠋ Implement  0/20
+  ⠋○○○○○○○○○○○○○○○…
+┃
+▸ Audit
+│
+○ Review
+│
+○ QA
+│
+○ History
+│
+○ PR

@@ -1,0 +1,19 @@
+# scenario: unreadable-state (64x26 char frame)
+
+◆ DRIVER TEST-1
+  state.json unreadable
+○ Preplan
+│
+○ Plan
+│
+○ Implement
+│
+○ Audit
+│
+○ Review
+│
+○ QA
+│
+○ History
+│
+○ PR

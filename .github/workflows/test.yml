@@ -4,7 +4,7 @@ name: test
 #   1. the agent-scripts unit suite (sh agent-scripts/tests/run-tests.sh)
 #   2. the full validation: ./scripts/validate.sh && ./scripts/validate-driver-viz.sh
 # Same commands as the manual release workflow (release.yml); setup mirrors it
-# (ubuntu-latest has python3 + git preinstalled; node 22 + ruby + shellcheck via apt).
+# (ubuntu-latest has python3 + git preinstalled; node 22 + bun + ruby + shellcheck).
 on:
   pull_request:
     branches: [main]
@@ -32,6 +32,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "22" # validate-driver-viz.sh needs >= 22.18 to strip TS types
+
+      - name: Install bun for driver-viz render snapshot tests
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4" # OpenTUI's native render lib only loads under bun
 
       - name: Install validation deps
         run: |

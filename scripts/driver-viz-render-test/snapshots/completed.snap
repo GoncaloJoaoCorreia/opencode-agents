@@ -1,0 +1,22 @@
+# scenario: completed (64x26 char frame)
+
+◆ DRIVER TEST-1  feat/TEST-1  PR #42
+✓ Preplan
+│
+✓ Plan  [Open Plan]
+│
+✓ Implement  2/2
+│
+✓ Audit
+│
+✓ Review
+│
+✓ QA
+│
+✓ History
+│
+✓ PR
+  ──────────
+  Total 40m00s
+  Tokens 128k
+  [Open report]

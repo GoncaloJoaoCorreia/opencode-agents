@@ -65,7 +65,9 @@ plugins/driver-viz/         # TUI-only plugin: animated sidebar flow chart of th
   lib/FlowChart.tsx         #   the stepper component (spinner + pulsing connector)
   test/state.test.ts        #   node --test (node >= 22.18 strips types; no build)
 scripts/validate.sh         # pre-release validation of agent/command/skill declarations — CI + local
-scripts/validate-driver-viz.sh  # driver-viz plugin checks + node --test — CI + local, separate step
+scripts/validate-driver-viz.sh  # driver-viz plugin checks + node --test + render snapshots — CI + local
+scripts/driver-viz-render-test/  # headless bun render/snapshot tests for the plugin (kept out of
+                                  # plugins/ so the release payload never ships its node_modules)
 scripts/screenshot-driver-viz.py  # regenerates docs/driver-viz-sidebar.png (kept out of plugins/ so the
                                   # release payload never ships it — see "driver-viz plugin" below)
 .github/workflows/release.yml  # manual release pipeline (see Releases)
@@ -108,6 +110,35 @@ layout changes with `python3 scripts/screenshot-driver-viz.py` — needs `pillow
 JetBrains Mono Nerd Font installed (glyph coverage for the braille spinner). The generator
 lives in top-level `scripts/`, not under `plugins/`, so it is never shipped in the release
 payload or installed into the config dir.
+
+### driver-viz render snapshot tests
+
+`scripts/driver-viz-render-test/` renders the real `plugins/driver-viz/lib/FlowChart.tsx`
+headlessly and snapshots the frame: it runs under **bun** (OpenTUI's native render lib only
+loads under bun, not node), transforms the plugin's `.tsx` with the same
+`@opentui/solid/bun-plugin` OpenCode uses (see `preload.ts`), mounts `DriverSection` with
+`testRender` from `@opentui/solid`, freezes `Date.now`, uses fixed run fixtures in the OS
+temp dir (outside any git repo, so the `+A/-D` line deterministically omits), and compares
+`captureCharFrame()` against committed `snapshots/*.snap`. A render throw fails the
+scenario — this harness is what caught the nested-`<text>` crash
+("TextNodeRenderable only accepts strings…"). `scripts/validate-driver-viz.sh` runs it when
+`bun` is on PATH (CI: `test.yml` installs bun via `setup-bun`; without bun the section
+skips). The harness lives in top-level `scripts/` so the release payload and the installed
+config dir never get its `node_modules` (only `bun.lock` is committed, deps are pinned).
+
+**Regenerating snapshots — only after an INTENTIONAL UI change** (glyphs, layout, labels,
+status rendering in `FlowChart.tsx` / `tui.tsx`):
+
+```
+cd scripts/driver-viz-render-test
+UPDATE_SNAPSHOTS=1 bun run test    # writes snapshots/*.snap
+```
+
+Then `git diff snapshots/` and review every changed line before committing. Never
+regenerate to silence a crash or an unexpected diff — fix the code (or the structural
+guard in `validate-driver-viz.sh`) instead. Note the snapshots exercise the pinned npm
+`@opentui/*` version, which proxies — but does not exactly match — the version embedded in
+the OpenCode binary.
 
 ## Releases
 

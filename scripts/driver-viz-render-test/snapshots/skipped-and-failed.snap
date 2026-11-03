@@ -1,0 +1,18 @@
+# scenario: skipped-and-failed (64x26 char frame)
+
+◆ DRIVER TEST-1
+✓ Preplan
+│
+✓ Plan  [Open Plan]
+│
+✓ Implement  1/1
+│
+✓ Audit
+│
+⊘ Review
+│
+⊘ QA
+│
+⊘ History
+│
+✗ PR
