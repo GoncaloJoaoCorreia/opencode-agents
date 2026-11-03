@@ -125,6 +125,12 @@ update the schemas too**, and keep README.md's summary in sync.
   `state.remote` / `params.forge` / `state.pr.forge` in
   `skills/driver-conventions/references/state.schema.json`. The detected forge is cached
   repo-locally in `git config driver.forge` (never committed).
+- **New agent-script**: add it under `agent-scripts/` with unit tests in
+  `agent-scripts/tests/` (wired into `run-tests.sh`), and mirror it in `install.sh`
+  (payload dirs + manifest + stale-cleanup case), `scripts/validate.sh` (asset list +
+  syntax/tests section), `.github/workflows/release.yml` (payload `cp` + self-test
+  `diff`), plus README/AGENTS.md and an invocation/exit-code entry in
+  `skills/driver-conventions/SKILL.md` §8.
 
 ## Gotchas (hard-earned — do not rediscover)
 
@@ -144,3 +150,10 @@ update the schemas too**, and keep README.md's summary in sync.
 - Phase agents deliberately set no `model:` — they inherit the session's model (user picks
   via `/models`).
 - `.plan/` is scratch and gitignored in target repos; `agent/` is committed there.
+- Don't re-implement routine, scriptable logic inside agent prompts (inline shell/python
+  in `agents/*.md`). If a phase needs mechanical, repeated work — git/forge probing, JSON
+  merges of `state.json`, looping over files, parsing command output — put it in a
+  shipped, unit-tested `agent-scripts/` script and call that from the prompt instead.
+  Precedent: `detect-forge.sh` + `driver-state.py` (G-20 / PR #1); the mechanism and the
+  mandate live in `skills/driver-conventions/SKILL.md` §8. Inline logic in a prompt is
+  only for one-off, phase-specific steps.
