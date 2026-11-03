@@ -12,14 +12,28 @@
 //   (palette: "Driver: show next run") cycles only this session's runs. When no run
 //   matches (e.g. all runs have `session_id: null` from an older driver) or the session
 //   ID is unknown, the most recently modified run is shown (previous behavior).
+// - Palette fallbacks for the clickable sidebar actions: "Driver: open plan" (enabled once
+//   the plan phase is done) and "Driver: open report" (enabled when .plan/<slug>/report.md
+//   exists) open the file with the system default app (open/xdg-open via node:child_process).
 // - Options (cli.json plugins object form): { "animate": false } disables the spinner and
 //   the pulsing connector.
+import { execFile } from "node:child_process"
 import { watch, type FSWatcher } from "node:fs"
+import { existsSync } from "node:fs"
 import { join } from "node:path"
 import { createEffect, createSignal } from "solid-js"
 import { Plugin } from "@opencode/plugin/tui"
 import { DriverSection } from "./lib/FlowChart.tsx"
-import { filterRunsBySession, findRepoRoot, pickRun, scanRuns, type RunInfo } from "./lib/state.ts"
+import {
+  filterRunsBySession,
+  findRepoRoot,
+  phaseStatus,
+  pickRun,
+  planFilePath,
+  reportFilePath,
+  scanRuns,
+  type RunInfo,
+} from "./lib/state.ts"
 
 const POLL_MS = 1000 // state re-scan; also re-reads the location, so session_move into a worktree is picked up
 const TICK_MS = 120 // animation frame
@@ -56,6 +70,30 @@ export default Plugin.define({
     // Runs of the current session only; falls back to the unfiltered list when the
     // session ID is unknown or no run matches yet (see filterRunsBySession).
     const filteredRuns = (): RunInfo[] => filterRunsBySession(runs(), sessionID())
+
+    // The run currently shown (selection, auto-switch, and palette commands all use it).
+    const currentRun = (): RunInfo | null => pickRun(filteredRuns(), activeSlug())
+
+    // Open a path with the system default app (open on darwin, xdg-open on linux);
+    // failures surface as an error toast instead of crashing the sidebar.
+    function openWithSystemApp(path: string) {
+      const cmd = process.platform === "darwin" ? "open" : process.platform === "linux" ? "xdg-open" : null
+      if (!cmd) {
+        context.ui.toast.show({
+          message: `No system opener on ${process.platform}: ${path}`,
+          variant: "error",
+        })
+        return
+      }
+      execFile(cmd, [path], (err) => {
+        if (err) {
+          context.ui.toast.show({
+            message: `Could not open ${path}: ${err.message}`,
+            variant: "error",
+          })
+        }
+      })
+    }
 
     // Auto-switch: when a newly appeared run of this session shows up in the filtered
     // list (sorted most-recent first), switch to it immediately.
@@ -124,6 +162,8 @@ export default Plugin.define({
             activeSlug={activeSlug}
             tick={tick}
             animate={animate}
+            sessionID={sessionID}
+            onOpenPath={openWithSystemApp}
           />
         )
       },
@@ -150,8 +190,33 @@ export default Plugin.define({
             context.ui.toast.show({ message: `Driver run ${next.slug}`, variant: "info", duration: 1500 })
           },
         },
+        {
+          id: "driver-viz.open-plan",
+          title: "Driver: open plan",
+          group: "Driver",
+          palette: true,
+          enabled: () => phaseStatus(currentRun()?.state ?? null, "plan") === "done",
+          run: () => {
+            const r = currentRun()
+            if (r && phaseStatus(r.state, "plan") === "done") openWithSystemApp(planFilePath(r))
+          },
+        },
+        {
+          id: "driver-viz.open-report",
+          title: "Driver: open report",
+          group: "Driver",
+          palette: true,
+          enabled: () => {
+            const r = currentRun()
+            return !!r && existsSync(reportFilePath(r))
+          },
+          run: () => {
+            const r = currentRun()
+            if (r && existsSync(reportFilePath(r))) openWithSystemApp(reportFilePath(r))
+          },
+        },
       ],
-      bindings: ["driver-viz.cycle-run"],
+      bindings: ["driver-viz.cycle-run", "driver-viz.open-plan", "driver-viz.open-report"],
     }))
 
     return () => {

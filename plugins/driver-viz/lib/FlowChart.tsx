@@ -1,23 +1,38 @@
 // The sidebar flow chart. Renders one vertical stepper per driver run:
-//   ◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2
+//   ◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2  ⏱ 12m34s
 //   ✓ Preplan
-//   ┃ Plan            <- connector pulses while the phase above runs
-//   ⠋ Implement  3/7
-//     ●●●○○○          <- per-task dots while implement runs
+//   ✓ Plan   [Open Plan]   <- clickable once the plan phase is done
+//   ┃ Implement  3/7
+//     ●●⠋○○○               <- per-task dots, colored by state, animated while running
 //   ○ Audit
 //   ...
-// Statuses come straight from .plan/<slug>/state.json (phases.<id>.status).
-import { For, Show, type Accessor } from "solid-js"
+//   ──────────────
+//   Total 1h02m03s  Tokens 128k  +412 -37  [Open report]   <- completion block
+// Statuses come from .plan/<slug>/state.json (phases.<id>.status); with multiple running
+// phases only the first renders as running (effectiveStatuses).
+import { execFile } from "node:child_process"
+import { existsSync } from "node:fs"
+import { dirname } from "node:path"
+import { createEffect, createSignal, For, Show, type Accessor } from "solid-js"
 import { PHASES } from "./phases.ts"
 import {
+  effectiveStatuses,
+  findRepoRoot,
+  formatElapsed,
   nextPendingIndex,
   phaseStatus,
   pickRun,
+  planFilePath,
+  reportFilePath,
+  runCompleted,
+  runDuration,
+  runStartedAt,
   runningIndex,
   taskCounts,
-  type DriverState,
+  taskIndicators,
   type PhaseStatus,
   type RunInfo,
+  type TaskKind,
 } from "./state.ts"
 import { palette, type Palette } from "./theme.ts"
 
@@ -28,16 +43,6 @@ const MAX_TASK_DOTS = 16
 // minor API drift between OpenCode releases.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Ctx = any
-
-function taskDots(state: DriverState | null): string {
-  const tasks = state?.plan?.tasks ?? []
-  const glyphs = tasks.slice(0, MAX_TASK_DOTS).map((t) => {
-    if (t.status === "done") return t.audit === "fail" || t.qa === "fail" ? "✗" : "●"
-    if (t.status === "skipped") return "⊘"
-    return "○"
-  })
-  return glyphs.join("") + (tasks.length > MAX_TASK_DOTS ? "…" : "")
-}
 
 function glyphFor(status: PhaseStatus, isNext: boolean, animate: boolean, tick: number): string {
   switch (status) {
@@ -54,26 +59,145 @@ function glyphFor(status: PhaseStatus, isNext: boolean, animate: boolean, tick: 
   }
 }
 
+function dotGlyph(kind: TaskKind, animate: boolean, tick: number): string {
+  switch (kind) {
+    case "done":
+      return "●"
+    case "failed":
+      return "✗"
+    case "skipped":
+      return "⊘"
+    case "running":
+      return animate ? SPINNER[tick % SPINNER.length] : "◐"
+    default:
+      return "○"
+  }
+}
+
+/** Best-effort token total from the session record; null when the host exposes none. */
+function tokenTotal(context: Ctx, sessionID: string | null): number | null {
+  try {
+    if (!sessionID) return null
+    const sess = context?.data?.session?.get?.(sessionID)
+    const t = sess?.tokens ?? sess?.usage
+    if (t && typeof t === "object") {
+      const total = Number(t.total ?? (Number(t.input ?? 0) + Number(t.output ?? 0)))
+      if (Number.isFinite(total) && total > 0) return total
+    }
+  } catch {
+    /* host API drift — omit the line */
+  }
+  return null
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}k`
+  return String(n)
+}
+
+interface LinesChanged {
+  added: number
+  deleted: number
+}
+
+/** Sum `git diff --numstat <merge-base>...HEAD`; null on any git failure. */
+function computeLinesChanged(repoRoot: string): Promise<LinesChanged | null> {
+  const bases = ["origin/main", "origin/master", "main", "master"]
+  const tryBase = (i: number): Promise<LinesChanged | null> => {
+    if (i >= bases.length) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      execFile("git", ["merge-base", bases[i], "HEAD"], { cwd: repoRoot }, (err, out) => {
+        if (err) {
+          resolve(tryBase(i + 1))
+          return
+        }
+        const base = out.trim().split("\n")[0]
+        execFile("git", ["diff", "--numstat", `${base}...HEAD`], { cwd: repoRoot }, (err2, out2) => {
+          if (err2) {
+            resolve(null)
+            return
+          }
+          let added = 0
+          let deleted = 0
+          for (const line of out2.split("\n")) {
+            const parts = line.trim().split(/\s+/)
+            if (parts.length >= 2) {
+              added += Number(parts[0]) || 0
+              deleted += Number(parts[1]) || 0
+            }
+          }
+          resolve({ added, deleted })
+        })
+      })
+    })
+  }
+  return tryBase(0)
+}
+
 export function DriverSection(props: {
   context: Ctx
   runs: Accessor<RunInfo[]>
   activeSlug: Accessor<string | null>
   tick: Accessor<number>
   animate: boolean
+  sessionID: Accessor<string | null>
+  onOpenPath: (path: string) => void
 }) {
   const c = (): Palette => palette((props.context.theme ?? {}) as Record<string, unknown>)
   const run = () => pickRun(props.runs(), props.activeSlug())
-  const statuses = (): PhaseStatus[] => {
-    const r = run()
-    return PHASES.map((p) => phaseStatus(r?.state ?? null, p.id))
-  }
+  // Single-running rule: at most one phase renders as running (Audit fix — spec-audit
+  // only shows running for run-scoped audit runs, not during Implement subtasks).
+  const statuses = (): PhaseStatus[] =>
+    effectiveStatuses(PHASES.map((p) => phaseStatus(run()?.state ?? null, p.id)))
   const running = () => runningIndex(statuses())
   const nextPending = () => nextPendingIndex(statuses())
+  const startedAt = () => runStartedAt(run()?.state ?? null)
+  const elapsedMs = (): number | null => {
+    const s = startedAt()
+    return s ? Date.now() - s.getTime() : null
+  }
   const position = () => {
     const list = props.runs()
     const r = run()
     const idx = r ? list.findIndex((x) => x.slug === r.slug) : -1
     return { idx, total: list.length }
+  }
+
+  // Lines changed (+A -D), cached per state.json mtime; omitted on git failure.
+  const [linesChanged, setLinesChanged] = createSignal<LinesChanged | null>(null)
+  const linesCache = new Map<string, LinesChanged | null>()
+  createEffect(() => {
+    const r = run()
+    if (!r || !runCompleted(statuses())) {
+      setLinesChanged(null)
+      return
+    }
+    const key = `${r.statePath}:${r.mtimeMs}`
+    if (linesCache.has(key)) {
+      setLinesChanged(linesCache.get(key) ?? null)
+      return
+    }
+    const root = findRepoRoot(dirname(r.statePath)) ?? dirname(r.statePath)
+    computeLinesChanged(root).then((v) => {
+      linesCache.set(key, v)
+      // only apply when this run/key is still the one on screen
+      const cur = run()
+      if (cur && `${cur.statePath}:${cur.mtimeMs}` === key) setLinesChanged(v)
+    })
+  })
+
+  const dotFg = (kind: TaskKind): unknown => {
+    switch (kind) {
+      case "done":
+        return c().success
+      case "failed":
+        return c().error
+      case "running":
+        return c().spinner
+      default:
+        return c().muted
+    }
   }
 
   return (
@@ -98,6 +222,12 @@ export function DriverSection(props: {
                 {position().idx + 1}/{position().total}
               </span>
             </Show>
+            <Show when={running() >= 0 && elapsedMs() != null}>
+              <span style={{ fg: c().muted }}>
+                {"  ⏱ "}
+                {formatElapsed(elapsedMs() ?? 0)}
+              </span>
+            </Show>
           </text>
           <Show when={r().state === null}>
             <text>
@@ -116,14 +246,15 @@ export function DriverSection(props: {
                   case "failed":
                     return c().error
                   case "running":
-                    return c().accent
+                    return c().spinner
                   default:
-                    return isNext() && props.animate ? c().accent : c().muted
+                    return isNext() && props.animate ? c().spinner : c().muted
                 }
               }
               const labelFg = () => (status() === "pending" || status() === "skipped" ? c().muted : c().base)
               const tasks = () => r().state?.plan?.tasks
               const counts = () => taskCounts(tasks())
+              const indicators = () => taskIndicators(tasks(), status() === "running")
               // connector leaving the running phase pulses ┃/│ on the animation tick
               const leavingRunning = () => running() === i() - 1
               return (
@@ -132,7 +263,7 @@ export function DriverSection(props: {
                     <text>
                       <span
                         style={{
-                          fg: leavingRunning() && props.animate ? c().accent : c().border,
+                          fg: leavingRunning() && props.animate ? c().spinner : c().border,
                         }}
                       >
                         {leavingRunning() && props.animate
@@ -152,6 +283,11 @@ export function DriverSection(props: {
                         {counts().done}/{counts().total}
                       </span>
                     </Show>
+                    <Show when={phase.id === "plan" && status() === "done"}>
+                      <text onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        <span style={{ fg: c().accent }}>{"  [Open Plan]"}</span>
+                      </text>
+                    </Show>
                   </text>
                   <Show
                     when={
@@ -161,16 +297,60 @@ export function DriverSection(props: {
                     }
                   >
                     <text>
-                      <span style={{ fg: counts().gateFailed > 0 ? c().error : c().muted }}>
-                        {"  "}
-                        {taskDots(r().state)}
-                      </span>
+                      <span style={{ fg: c().muted }}>{"  "}</span>
+                      <For each={indicators().slice(0, MAX_TASK_DOTS)}>
+                        {(ind) => (
+                          <span style={{ fg: dotFg(ind.kind) }}>
+                            {dotGlyph(ind.kind, props.animate, props.tick())}
+                          </span>
+                        )}
+                      </For>
+                      <Show when={(tasks()?.length ?? 0) > MAX_TASK_DOTS}>
+                        <span style={{ fg: c().muted }}>{"…"}</span>
+                      </Show>
                     </text>
                   </Show>
                 </>
               )
             }}
           </For>
+          <Show when={runCompleted(statuses())}>
+            <text>
+              <span style={{ fg: c().border }}>{"  ──────────"}</span>
+            </text>
+            <Show when={runDuration(r().state) != null}>
+              <text>
+                <span style={{ fg: c().muted }}>
+                  {"  Total "}
+                  {formatElapsed(runDuration(r().state) ?? 0)}
+                </span>
+              </text>
+            </Show>
+            <Show when={tokenTotal(props.context, props.sessionID()) != null}>
+              <text>
+                <span style={{ fg: c().muted }}>
+                  {"  Tokens "}
+                  {formatTokens(tokenTotal(props.context, props.sessionID()) ?? 0)}
+                </span>
+              </text>
+            </Show>
+            <Show when={linesChanged()}>
+              {(lc) => (
+                <text>
+                  <span style={{ fg: c().muted }}>{"  "}</span>
+                  <span style={{ fg: c().success }}>{"+"}{lc().added}</span>
+                  <span style={{ fg: c().muted }}>{" "}</span>
+                  <span style={{ fg: c().error }}>{"-"}{lc().deleted}</span>
+                </text>
+              )}
+            </Show>
+            {/* [Open report] appears when the driver has written .plan/<slug>/report.md (driver §7) */}
+            <Show when={existsSync(reportFilePath(r()))}>
+              <text onMouseDown={() => props.onOpenPath(reportFilePath(r()))}>
+                <span style={{ fg: c().accent }}>{"  [Open report]"}</span>
+              </text>
+            </Show>
+          </Show>
         </box>
       )}
     </Show>

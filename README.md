@@ -154,22 +154,33 @@ run is active in the repo you're in, the TUI sidebar shows an animated flow char
 run, read live from `.plan/<slug>/state.json`:
 
 ```text
-◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2
+◆ DRIVER ABC-123  feat/ABC-123  PR #42  1/2  ⏱ 12m34s
 ✓ Preplan
-┃ Plan            ← pulses while the phase above runs
-⠋ Implement  3/7
-  ●●●○○○          ← per-task dots while implement runs
+✓ Plan   [Open Plan]
+┃ Implement  3/7    ← connector pulses while the phase above runs
+  ●●⠋○○○           ← per-task dots, colored by state, animated while implement runs
 ▸ Audit
 ○ Review
 ○ QA
 ○ History
 ○ PR
+──────────
+Total 1h02m03s · Tokens 128k · +412 -37 · [Open report]
 ```
 
 <img src="docs/driver-viz-sidebar.png" width="420" alt="driver-viz sidebar flow chart in the OpenCode TUI">
 
-`✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase. Worktree
-runs (`--worktree`) show up automatically — the driver moves the session into the worktree.
+`✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase (only one
+phase shows as running at a time; the spinner is tinted a guaranteed non-white color).
+Worktree runs (`--worktree`) show up automatically — the driver moves the session into
+the worktree. While a phase runs, the header shows an elapsed-time counter (`⏱`, from the
+earliest `phases.*.started_at`); once the plan phase is done, the Plan row offers a
+clickable `[Open Plan]` (palette fallback: "Driver: open plan") that opens
+`.plan/<slug>/plan.md` with the system default app. When the run completes (all phases
+done/skipped), a completion block below the chart shows total time, token usage when the
+session exposes it, lines changed (`+A -D` from `git diff --numstat` merge-base..HEAD), and
+a clickable `[Open report]` (palette fallback: "Driver: open report") when the driver has
+written `.plan/<slug>/report.md`.
 The sidebar is session-scoped: it shows only runs whose `state.session_id` (recorded by
 the driver at run start) matches the current session's ID, switches immediately to a newly
 started run of this session, and `/driver-viz` (palette: "Driver: show next run") cycles

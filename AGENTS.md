@@ -83,6 +83,20 @@ matches the current session's ID (sidebar.content slot input `sessionID`, fallba
 immediately, and `/driver-viz` (palette "Driver: show next run") cycles only this
 session's runs; when no run matches (e.g. all runs have `session_id: null` from an older
 driver) the most recent run is shown. Hidden when the repo has no `.plan/`.
+The sidebar also shows an elapsed-time counter (`⏱`, from the earliest
+`phases.*.started_at`) in the header while a phase is running, a clickable `[Open Plan]`
+on the Plan row once the plan phase is done (plus the palette command "Driver: open
+plan") that opens `.plan/<slug>/plan.md` with the system default app (`open`/`xdg-open`
+via `node:child_process`, errors to a toast), and a completion block below the task
+graph once every phase is done/skipped: total time, best-effort token count from the
+session record, `+A -D` lines changed (`git diff --numstat` merge-base..HEAD, omitted on
+git failure), and a clickable `[Open report]` when `.plan/<slug>/report.md` exists
+(written by the driver at cycle end, driver §7; palette fallback "Driver: open report").
+At most one phase renders as running (`effectiveStatuses` in `lib/state.ts` — later
+running phases show pending, so Audit is only in progress for run-scoped audit runs),
+the spinner/connector use a guaranteed non-white `spinner` tint (`lib/theme.ts`), and
+the Implement subtask dots are colored per task state with an animated in-progress dot
+(`taskIndicators`).
 Option `animate: false` (cli.json plugins object form) disables animation. Slug dirs are
 validated against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; unreadable state.json renders
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may
