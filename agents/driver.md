@@ -128,6 +128,16 @@ Write it with `"$SCRIPTS/driver-state.py"` (see golden rules / driver-convention
 create the skeleton file, then apply the fields with `set`/`merge` (e.g.
 `"$SCRIPTS/driver-state.py" set "$statePath" phases.preplan.status '"pending"'`).
 If it exists, `merge` a patch — never clobber.
+- **Record the session ID** (fresh run only — on resume, steps 3–5 are skipped and
+  `session_id` is left untouched): call `tools.opencode.session_move({ directory: repoRoot })`
+  with `sessionID` omitted — a no-op move that returns `{ sessionID, directory }` of the
+  current session (built-in `opencode` tool, OpenCode v2.2.5) — and record the returned ID
+  as `state.session_id` via `"$SCRIPTS/driver-state.py" set "$statePath" session_id <json>`.
+  JSON-encode the ID safely (e.g. `python3 -c 'import json,sys; print(json.dumps(sys.argv[1]))' "$id"`
+  or a patch file under `.plan/<slug>/` — never interpolate it into a shell command). If the
+  built-in `opencode` tool is unavailable or errors (older OpenCode), set `session_id` to
+  `null` and continue. driver-viz filters the sidebar to runs whose `session_id` matches the
+  current session (driver-conventions §1).
 
 ## 6. Spawn phases (registry order)
 

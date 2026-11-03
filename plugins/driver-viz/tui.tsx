@@ -5,16 +5,21 @@
 // of the session's location (so --worktree runs show up too: the driver moves the session
 // into the worktree). Hidden entirely when the repo has no .plan/ directory.
 //
-// - Most recently modified run is shown; `/driver-viz` (palette: "Driver: show next run")
-//   cycles through concurrent runs in the same repo.
+// - Session-scoped run selection: only runs whose state.json `session_id` matches the
+//   current session's ID are shown (the sidebar.content slot render input carries
+//   `sessionID`; fallback `ui.router.current()` when it is { type: "session", sessionID }).
+//   A newly started run of this session is switched to immediately; `/driver-viz`
+//   (palette: "Driver: show next run") cycles only this session's runs. When no run
+//   matches (e.g. all runs have `session_id: null` from an older driver) or the session
+//   ID is unknown, the most recently modified run is shown (previous behavior).
 // - Options (cli.json plugins object form): { "animate": false } disables the spinner and
 //   the pulsing connector.
 import { watch, type FSWatcher } from "node:fs"
 import { join } from "node:path"
-import { createSignal } from "solid-js"
+import { createEffect, createSignal } from "solid-js"
 import { Plugin } from "@opencode/plugin/tui"
 import { DriverSection } from "./lib/FlowChart.tsx"
-import { findRepoRoot, pickRun, scanRuns, type RunInfo } from "./lib/state.ts"
+import { filterRunsBySession, findRepoRoot, pickRun, scanRuns, type RunInfo } from "./lib/state.ts"
 
 const POLL_MS = 1000 // state re-scan; also re-reads the location, so session_move into a worktree is picked up
 const TICK_MS = 120 // animation frame
@@ -29,6 +34,38 @@ export default Plugin.define({
     const [runs, setRuns] = createSignal<RunInfo[]>([])
     const [activeSlug, setActiveSlug] = createSignal<string | null>(null)
     const [tick, setTick] = createSignal(0)
+    // Current session ID: primary source is the sidebar.content slot render input
+    // (SlotMap input `sessionID`, v2.2.5); fallback is ui.router.current().
+    const [slotSessionID, setSlotSessionID] = createSignal<string | null>(null)
+
+    function sessionIDFromRouter(): string | null {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cur = (context.ui as any)?.router?.current?.()
+        if (cur && typeof cur === "object" && cur.type === "session" && typeof cur.sessionID === "string") {
+          return cur.sessionID
+        }
+      } catch {
+        /* host API drift — fall through to null */
+      }
+      return null
+    }
+
+    const sessionID = (): string | null => slotSessionID() ?? sessionIDFromRouter()
+
+    // Runs of the current session only; falls back to the unfiltered list when the
+    // session ID is unknown or no run matches yet (see filterRunsBySession).
+    const filteredRuns = (): RunInfo[] => filterRunsBySession(runs(), sessionID())
+
+    // Auto-switch: when a newly appeared run of this session shows up in the filtered
+    // list (sorted most-recent first), switch to it immediately.
+    let prevFilteredSlugs = new Set<string>()
+    createEffect(() => {
+      const list = filteredRuns()
+      const fresh = list.filter((r) => !prevFilteredSlugs.has(r.slug))
+      if (fresh.length > 0) setActiveSlug(fresh[0].slug)
+      prevFilteredSlugs = new Set(list.map((r) => r.slug))
+    })
 
     let planDir: string | null = null
     let watcher: FSWatcher | undefined
@@ -76,15 +113,20 @@ export default Plugin.define({
 
     const unregisterSlot = context.ui.slot({
       append: "sidebar.content",
-      render: () => (
-        <DriverSection
-          context={context}
-          runs={runs}
-          activeSlug={activeSlug}
-          tick={tick}
-          animate={animate}
-        />
-      ),
+      render: (input) => {
+        // SlotMap["sidebar.content"] input carries the current session's ID (v2.2.5).
+        const sid = (input as { sessionID?: unknown } | null | undefined)?.sessionID
+        if (typeof sid === "string" && sid) setSlotSessionID(sid)
+        return (
+          <DriverSection
+            context={context}
+            runs={filteredRuns}
+            activeSlug={activeSlug}
+            tick={tick}
+            animate={animate}
+          />
+        )
+      },
     })
 
     context.keymap.layer(() => ({
@@ -97,11 +139,11 @@ export default Plugin.define({
           group: "Driver",
           palette: true,
           slash: { name: "driver-viz", aliases: ["drv"] },
-          enabled: () => runs().length > 1,
+          enabled: () => filteredRuns().length > 1,
           run: () => {
-            const list = runs()
+            const list = filteredRuns() // cycle only within the current session's runs
             if (list.length < 2) return
-            const cur = activeSlug() ?? pickRun(list, null)?.slug ?? null
+            const cur = list.find((r) => r.slug === activeSlug())?.slug ?? pickRun(list, null)?.slug ?? null
             const idx = list.findIndex((r) => r.slug === cur)
             const next = list[(idx + 1) % list.length]
             setActiveSlug(next.slug)

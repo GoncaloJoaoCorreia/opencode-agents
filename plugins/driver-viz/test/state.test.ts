@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { test } from "node:test"
 import {
+  filterRunsBySession,
   findRepoRoot,
   nextPendingIndex,
   phaseStatus,
@@ -15,6 +16,7 @@ import {
   SLUG_RE,
   taskCounts,
   type DriverState,
+  type RunInfo,
 } from "../lib/state.ts"
 import { PHASE_IDS, PHASES } from "../lib/phases.ts"
 
@@ -139,6 +141,64 @@ test("pickRun prefers the selected slug, else the most recent, else null", () =>
     assert.equal(pickRun(runs, "AAA-1")?.slug, "AAA-1") // explicit selection wins
     assert.equal(pickRun(runs, "GONE-1")?.slug, "BBB-2") // stale selection falls back
     assert.equal(pickRun([], null), null)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+function run(slug: string, session_id: string | null | undefined, mtimeMs = 0): RunInfo {
+  return { slug, statePath: `/x/.plan/${slug}/state.json`, mtimeMs, state: { issue_id: slug, session_id } }
+}
+
+test("filterRunsBySession returns only the runs of the given session", () => {
+  const runs = [run("AAA-1", "ses_A", 3), run("BBB-2", "ses_B", 2), run("CCC-3", "ses_A", 1)]
+  const out = filterRunsBySession(runs, "ses_A")
+  assert.deepEqual(out.map((r) => r.slug), ["AAA-1", "CCC-3"])
+})
+
+test("filterRunsBySession: no match -> input unchanged (graceful fallback)", () => {
+  const runs = [run("AAA-1", "ses_A"), run("BBB-2", "ses_B")]
+  assert.equal(filterRunsBySession(runs, "ses_Z"), runs)
+})
+
+test("filterRunsBySession: all runs session_id null -> input unchanged", () => {
+  const runs = [run("AAA-1", null), run("BBB-2", null)]
+  assert.equal(filterRunsBySession(runs, "ses_A"), runs)
+})
+
+test("filterRunsBySession: null/undefined/empty sessionID -> input unchanged", () => {
+  const runs = [run("AAA-1", "ses_A"), run("BBB-2", "ses_B")]
+  assert.equal(filterRunsBySession(runs, null), runs)
+  assert.equal(filterRunsBySession(runs, undefined), runs)
+  assert.equal(filterRunsBySession(runs, ""), runs)
+})
+
+test("filterRunsBySession: empty runs -> empty", () => {
+  assert.deepEqual(filterRunsBySession([], "ses_A"), [])
+})
+
+test("filterRunsBySession: mid-write run (state null) does not match until it parses", () => {
+  const midWrite: RunInfo = { slug: "NEW-1", statePath: "/x/.plan/NEW-1/state.json", mtimeMs: 9, state: null }
+  const runs = [midWrite, run("AAA-1", "ses_A")]
+  assert.equal(filterRunsBySession(runs, "ses_A").length, 1)
+  midWrite.state = { issue_id: "NEW-1", session_id: "ses_A" }
+  assert.deepEqual(filterRunsBySession(runs, "ses_A").map((r) => r.slug), ["NEW-1", "AAA-1"])
+})
+
+test("scan + filter integration: two slug dirs with different session_ids", () => {
+  const root = tmp()
+  try {
+    const plan = join(root, ".plan")
+    mkdirSync(join(plan, "AAA-1"), { recursive: true })
+    mkdirSync(join(plan, "BBB-2"), { recursive: true })
+    writeFileSync(join(plan, "AAA-1", "state.json"), JSON.stringify({ issue_id: "AAA-1", session_id: "ses_A" }))
+    writeFileSync(join(plan, "BBB-2", "state.json"), JSON.stringify({ issue_id: "BBB-2", session_id: "ses_B" }))
+    const runs = scanRuns(plan)
+    assert.equal(runs.length, 2)
+    assert.deepEqual(filterRunsBySession(runs, "ses_A").map((r) => r.slug), ["AAA-1"])
+    assert.deepEqual(filterRunsBySession(runs, "ses_B").map((r) => r.slug), ["BBB-2"])
+    assert.equal(filterRunsBySession(runs, null), runs) // null sessionID -> both
+    assert.equal(filterRunsBySession(runs, "ses_Z"), runs) // no match -> both (fallback)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

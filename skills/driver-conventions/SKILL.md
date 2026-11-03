@@ -79,6 +79,14 @@ Schema: `references/state.schema.json`. Key rules:
 - `report` = path to the final run report (`.plan/<slug>/report.md`), written by the driver
   at cycle end (agents/driver.md §7) in addition to printing it, and recorded via
   `driver-state.py set`.
+- `session_id` (`string | null`) — ID of the OpenCode session that started the run. Written
+  by the driver at skeleton creation (agents/driver.md step 5) by calling the built-in
+  `opencode.session_move({ directory: repoRoot })` with `sessionID` omitted (a no-op move
+  returning `{ sessionID, directory }` of the current session) and recording the returned ID
+  via `driver-state.py set`; `null` when the built-in `opencode` tool is unavailable (older
+  OpenCode). Left untouched on resume — it identifies the session that STARTED the run.
+  Used by the driver-viz sidebar plugin for session-scoped run filtering (runs whose
+  `session_id` matches the current session's ID; fallback to most-recent when null/no match).
 - **Per-task gating (always on):**
   the driver's implement fan-out wraps each task before moving to the next:
   `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`) with

@@ -170,8 +170,12 @@ run, read live from `.plan/<slug>/state.json`:
 
 `✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase. Worktree
 runs (`--worktree`) show up automatically — the driver moves the session into the worktree.
-With several concurrent runs in one repo, `/driver-viz` (palette: "Driver: show next run")
-cycles through them. The section hides itself in repos without a `.plan/` directory. To
+The sidebar is session-scoped: it shows only runs whose `state.session_id` (recorded by
+the driver at run start) matches the current session's ID, switches immediately to a newly
+started run of this session, and `/driver-viz` (palette: "Driver: show next run") cycles
+only this session's runs. When no run matches — e.g. all runs have `session_id: null` from
+an older driver — the most recently modified run is shown instead. The section hides
+itself in repos without a `.plan/` directory. To
 disable the animation, register the plugin with options in `cli.json`:
 `"plugins": [{ "package": "/abs/path/to/.config/opencode/plugins/driver-viz", "options": { "animate": false } }]`.
 

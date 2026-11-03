@@ -320,7 +320,11 @@
         "cli": { "type": ["string", "null"], "enum": ["gh", "glab", "fj", null], "description": "forge CLI used (fj = forgejo-cli)" }
       }
     },
-    "report": { "type": "string", "description": "path to the final run report, .plan/<slug>/report.md, written by the driver at cycle end" }
+    "report": { "type": "string", "description": "path to the final run report, .plan/<slug>/report.md, written by the driver at cycle end" },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "ID of the OpenCode session that started the run; written by the driver at skeleton creation (agents/driver.md step 5) via the built-in opencode.session_move no-op; null on older OpenCode without the tool; used by driver-viz for session-scoped run filtering"
+    }
   },
   "additionalProperties": true
 }

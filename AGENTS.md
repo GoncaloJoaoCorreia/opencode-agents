@@ -77,8 +77,12 @@ Reads `.plan/<slug>/state.json` at the repo root of the session's location (so `
 runs show up — the driver moves the session into the worktree) via `fs.watch` + a 1s poll,
 and renders the 8-phase stepper in `sidebar.content`: `✓/✗/⊘/○` for done/failed/skipped/
 pending, a braille spinner + pulsing connector on the running phase, per-task dots under
-implement, PR link in the header. Most recent run by default; `/driver-viz` (palette
-"Driver: show next run") cycles concurrent runs. Hidden when the repo has no `.plan/`.
+implement, PR link in the header. Session-scoped: only runs whose `state.session_id`
+matches the current session's ID (sidebar.content slot input `sessionID`, fallback
+`ui.router.current()`) are shown, a newly started run of this session is switched to
+immediately, and `/driver-viz` (palette "Driver: show next run") cycles only this
+session's runs; when no run matches (e.g. all runs have `session_id: null` from an older
+driver) the most recent run is shown. Hidden when the repo has no `.plan/`.
 Option `animate: false` (cli.json plugins object form) disables animation. Slug dirs are
 validated against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; unreadable state.json renders
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may

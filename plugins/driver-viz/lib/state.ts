@@ -30,6 +30,7 @@ export interface TaskEntry {
 // references/state.schema.json, which allows additionalProperties — stay tolerant).
 export interface DriverState {
   issue_id?: string
+  session_id?: string | null // OpenCode session that started the run (null on older OpenCode)
   branch?: string
   plan_dir?: string
   params?: { skip?: string[]; phases?: string[] }
@@ -127,6 +128,22 @@ export function taskCounts(tasks: TaskEntry[] | undefined): {
     skipped: list.filter((t) => t.status === "skipped").length,
     gateFailed: list.filter((t) => t.audit === "fail" || t.qa === "fail").length,
   }
+}
+
+/**
+ * Session-scoped run filtering: when `sessionID` is a non-empty string, return only the runs
+ * whose `state.session_id === sessionID`. When that yields an empty list (no run of this
+ * session yet, or all runs have `session_id` null/missing — e.g. written by an older
+ * driver), or when `sessionID` is null/undefined, return the input unchanged (graceful
+ * fallback to the most-recent-run behavior). Pure — never throws.
+ */
+export function filterRunsBySession(
+  runs: RunInfo[],
+  sessionID: string | null | undefined,
+): RunInfo[] {
+  if (!sessionID) return runs
+  const matching = runs.filter((r) => r.state?.session_id === sessionID)
+  return matching.length > 0 ? matching : runs
 }
 
 /** The run to display: the user-selected slug when still present, else the most recent. */
