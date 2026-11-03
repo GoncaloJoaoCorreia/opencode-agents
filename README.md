@@ -54,11 +54,12 @@ Re-run it after pulling changes.
   that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
   `agent-scripts/`, `plugins/` (unless `--no-plugin`) and those two meta files.
 - **Driver helper scripts.** `agent-scripts/` installs to
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the two scripts the
-  driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
-  mirroring `skills/driver-conventions/SKILL.md` §7.1) and `driver-state.py` (atomic,
-  merge-never-clobber access to `.plan/<slug>/state.json`). See `agent-scripts/README.md`
-  in this repo for their contracts.
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the three scripts
+  the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
+  mirroring `skills/driver-conventions/SKILL.md` §7.1), `detect-modules.py` (module
+  detection + file→module mapping for the write-history phase, §4/§8) and `driver-state.py`
+  (atomic, merge-never-clobber access to `.plan/<slug>/state.json`). See
+  `agent-scripts/README.md` in this repo for their contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -122,7 +123,7 @@ flowchart TD
 | spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
-| write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
+| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
 Per-task gating: right after each task's commit
@@ -212,17 +213,20 @@ disable the animation, register the plugin with options in `cli.json`:
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
 final `pr` phase, which pushes the branch and opens the PR.
-- **`agent/<module>/history.md` and `decisions.md`** — committed by the final phase as a
-  `docs(driver): ...` commit. Module = first path segment of the changed files under
-  `src/` (else first segment, else `core`).
+- **`<module>/.agent/history.md` and `decisions.md`** — committed by the final phase as a
+  `docs(driver): ...` commit; repo-root-level changes land in the repo-root `.agent/`.
+  Module dirs are detected by the shipped `agent-scripts/detect-modules.py` (build
+  system first, in order Gradle → Maven → npm-family → Cargo; fallback: top-level
+  dirs, plus `src/*` when a root `src/` exists), and each changed file maps to the
+  longest matching module dir.
 - **Branch** — `feat/<slug>`, created automatically on protected branches.
 
 ## Requirements & limitations
 
 - **Install requires `python3` and `git`.** `install.sh` hard-fails with a clear message
   before installing (or downloading, in release mode) when `python3` cannot execute or
-  `git` is missing — the installed `agent-scripts/` (`driver-state.py`, `detect-forge.sh`)
-  need both. A forge CLI (`gh` / `glab` / `forgejo-cli`) is optional: only the `pr` phase
+  `git` is missing — the installed `agent-scripts/` (`driver-state.py`, `detect-forge.sh`,
+  `detect-modules.py`) need both. A forge CLI (`gh` / `glab` / `forgejo-cli`) is optional: only the `pr` phase
   uses one, and it degrades gracefully (skips with a note) without it.
 - **Interactive TUI only.** The driver asks questions along the way (slug, plan approval,
   QA command, retries), so headless `opencode run` is not supported.

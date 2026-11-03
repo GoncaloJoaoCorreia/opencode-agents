@@ -296,9 +296,10 @@
           "items": {
             "type": "object",
             "properties": {
-              "module": { "type": "string" },
-              "history_file": { "type": "string" },
-              "decision_file": { "type": ["string", "null"] },
+              "module": { "type": "string", "description": "module name = module dir relative to the repo root (e.g. module1, src/core); \"root\" for repo-root-level changes" },
+              "agent_dir": { "type": "string", "description": "module dir holding the .agent/ folder (\".\" for the repo root); added in G-22 — additive extension, no field removed" },
+              "history_file": { "type": "string", "description": "<agent_dir>/.agent/history.md (G-22: per-module .agent/ folder; previously the root-level agent/ path)" },
+              "decision_file": { "type": ["string", "null"], "description": "<agent_dir>/.agent/decisions.md when real decisions were recorded, else null" },
               "commit": { "type": ["string", "null"] }
             }
           }

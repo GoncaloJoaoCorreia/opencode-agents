@@ -11,9 +11,9 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/
 ## Prerequisites
 
 - POSIX `sh` and `git` (assumed present)
-- `python3` (hard prerequisite for `driver-state.py`; the installer hard-fails
-  without it)
-- No `jq`, no third-party Python packages — both scripts are stdlib/POSIX only.
+- `python3` (hard prerequisite for `driver-state.py` and `detect-modules.py`; the
+  installer hard-fails without it)
+- No `jq`, no third-party Python packages — all scripts are stdlib/POSIX only.
 
 ## detect-forge.sh
 
@@ -106,6 +106,61 @@ driver-state.py merge <state.json> <patch.json>
 - `--help` → usage on stdout, exit 0; misuse / invalid JSON / missing file →
   stderr + exit 2 (`get` on a missing path exits 1)
 
+## detect-modules.py
+
+Detects a target repo's module folders and maps changed files to them — the
+mechanism behind the per-module `.agent/` history layout
+(`skills/driver-conventions/SKILL.md` §4; called by `driver/write-history`).
+python3 stdlib only, executable, shebang `#!/usr/bin/env python3`.
+
+### Invocation
+
+```
+detect-modules.py [--repo DIR] modules
+detect-modules.py [--repo DIR] map FILE...
+```
+
+- `--repo DIR` — target repo root (default: cwd)
+- `modules` — print the detected build system + module dirs as one JSON object
+- `map FILE...` — map each FILE (repo-relative or absolute) to its module dir;
+  FILEs outside the repo are an error
+- `--help` — usage on stdout, exit 0
+
+### Output contract
+
+Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
+
+```json
+{ "repo": "/abs/repo", "build_system": "gradle|maven|npm|cargo|fallback", "modules": [ { "name": "module1", "dir": "module1" } ] }
+```
+
+for `modules`, and
+
+```json
+{ "module1/SomeFile.ts": "module1", "README.md": "." }
+```
+
+for `map` — the LONGEST detected module dir that is a path-segment prefix of the
+file wins (nested folders inside a module belong to the module); `"."` = repo
+root or under no module dir.
+
+Build-system detection, first match wins: **Gradle** (root `settings.gradle` /
+`settings.gradle.kts` `include(...)` statements, incl.
+`project(":x").projectDir = file(...)` overrides) → **Maven** (root `pom.xml`
+`<modules><module>...`) → **npm-family** (root `package.json` `workspaces` array
+or `{ "packages": [...] }` and/or root `pnpm-workspace.yaml` `packages:` globs) →
+**Cargo** (root `Cargo.toml` `[workspace]` members minus exclude). Fallback when
+no build system matches: the repo's top-level directories (one level deep), PLUS
+the directories under a root `src/` when one exists (one extra level, never
+deeper). Hidden dirs (`.git`, `.plan`, `.agent`, …) are never modules; the repo
+root itself is not a module entry.
+
+### Exit codes
+
+- `0` — exactly one JSON object on stdout
+- `2` — error (unknown flag, unreadable repo, file outside repo): message on
+  stderr, stdout stays EMPTY (pure JSON on success paths only)
+
 ## Tests
 
 ```
@@ -114,8 +169,12 @@ sh agent-scripts/tests/run-tests.sh
 
 Runs `tests/test-detect-forge.sh` (scratch git repos in `mktemp -d` + stub CLI
 executables first on PATH: known-host map, URL forms, probe order, cache
-semantics, `--no-cache`, error paths, single-JSON-line stdout) and
+semantics, `--no-cache`, error paths, single-JSON-line stdout),
 `tests/test-driver-state.py` (unittest in tmp dirs: validate, set/get/push/merge
-round-trips, never-delete merge, slug/path guard, atomicity, error paths), plus
-`sh -n` / `py_compile` syntax checks. Exits non-zero on any failure; prints
-`ok: detect-forge tests` / `ok: driver-state tests` per suite.
+round-trips, never-delete merge, slug/path guard, atomicity, error paths), and
+`tests/test-detect-modules.py` (unittest with fixture repos: Gradle/Maven/npm/
+Cargo detection + precedence order, fallback depth rule incl. the `src/` extra
+level, root-file and nested-file mapping, CLI contract, exit codes 0/2 with empty
+stdout on error), plus `sh -n` / `py_compile` syntax checks. Exits non-zero on
+any failure; prints `ok: detect-forge tests` / `ok: driver-state tests` /
+`ok: detect-modules tests` per suite.
