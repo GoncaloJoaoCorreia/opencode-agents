@@ -119,7 +119,10 @@ loads under bun, not node), transforms the plugin's `.tsx` with the same
 `@opentui/solid/bun-plugin` OpenCode uses (see `preload.ts`), mounts `DriverSection` with
 `testRender` from `@opentui/solid`, freezes `Date.now`, uses fixed run fixtures in the OS
 temp dir (outside any git repo, so the `+A/-D` line deterministically omits), and compares
-`captureCharFrame()` against committed `snapshots/*.snap`. A render throw fails the
+`captureSpans()` (styled frame: text + fg/bg/attributes, serialized as
+`<fg=..;bg=..;attrs>text</>`) against committed `snapshots/*.snap` — so snapshots cover the
+entire render including styling. `PREVIEW=1 bun run test` prints the scenarios as ANSI to
+the terminal to eyeball styling changes. A render throw fails the
 scenario — this harness is what caught the nested-`<text>` crash
 ("TextNodeRenderable only accepts strings…"). `scripts/validate-driver-viz.sh` runs it when
 `bun` is on PATH (CI: `test.yml` installs bun via `setup-bun`; without bun the section

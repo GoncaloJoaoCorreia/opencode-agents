@@ -284,9 +284,12 @@ export function DriverSection(props: {
                       </span>
                     </Show>
                     <Show when={phase.id === "plan" && status() === "done"}>
-                      {/* span, not text: a <text> is not a valid child of a <text> node */}
-                      <span style={{ fg: c().accent }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
-                        {"  [Open Plan]"}
+                      {/* span, not text: a <text> is not a valid child of a <text> node.
+                          Padding stays outside the underlined span so the underline
+                          only covers the label, not the leading spaces. */}
+                      <span style={{ fg: c().muted }}>{"  "}</span>
+                      <span style={{ fg: c().link, underline: true }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        {"[Open Plan]"}
                       </span>
                     </Show>
                   </text>
@@ -348,7 +351,8 @@ export function DriverSection(props: {
             {/* [Open report] appears when the driver has written .plan/<slug>/report.md (driver §7) */}
             <Show when={existsSync(reportFilePath(r()))}>
               <text onMouseDown={() => props.onOpenPath(reportFilePath(r()))}>
-                <span style={{ fg: c().accent }}>{"  [Open report]"}</span>
+                <span style={{ fg: c().muted }}>{"  "}</span>
+                <span style={{ fg: c().link, underline: true }}>{"[Open report]"}</span>
               </text>
             </Show>
           </Show>

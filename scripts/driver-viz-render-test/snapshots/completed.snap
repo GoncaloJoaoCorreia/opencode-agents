@@ -1,22 +1,22 @@
-# scenario: completed (64x26 char frame)
+# scenario: completed (64x26 styled frame: <fg=..;bg=..;attrs>text</>)
 
-◆ DRIVER TEST-1  feat/TEST-1  PR #42
-✓ Preplan
-│
-✓ Plan  [Open Plan]
-│
-✓ Implement  2/2
-│
-✓ Audit
-│
-✓ Review
-│
-✓ QA
-│
-✓ History
-│
-✓ PR
-  ──────────
-  Total 40m00s
-  Tokens 128k
-  [Open report]
+<fg=#58a6ff;bg=#00000000;b>◆ DRIVER </><fg=#e6edf3;bg=#00000000>TEST-1</><fg=#8b949e;bg=#00000000>  feat/TEST-1</><fg=#3fb950;bg=#00000000>  PR #42</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>Preplan</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>Plan</><fg=#8b949e;bg=#00000000>  </><fg=#8b949e;bg=#00000000;u>[Open Plan]</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>Implement</><fg=#8b949e;bg=#00000000>  2/2</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>Audit</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>Review</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>QA</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>History</>
+<fg=#30363d;bg=#00000000>│</>
+<fg=#3fb950;bg=#00000000>✓ </><fg=#e6edf3;bg=#00000000>PR</>
+<fg=#30363d;bg=#00000000>  ──────────</>
+<fg=#8b949e;bg=#00000000>  Total 40m00s</>
+<fg=#8b949e;bg=#00000000>  Tokens 128k</>
+<fg=#8b949e;bg=#00000000>  </><fg=#8b949e;bg=#00000000;u>[Open report]</>

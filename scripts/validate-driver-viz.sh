@@ -77,8 +77,9 @@ failures << "#{gen} must not live under plugins/ (it would ship in the release p
 # StyledText instances"; use <span onMouseDown> inside <text> instead)
 Dir.glob("plugins/driver-viz/**/*.tsx").each do |f|
   depth = 0
-  # strip JSX comments first — they may mention tags literally
-  src = File.read(f).gsub(%r{\{/\*.*?\*/\}}, "")
+  # strip JSX comments first — they may mention tags literally (multi-line comments
+  # are legal JSX, so the match must span newlines)
+  src = File.read(f).gsub(%r{\{/\*.*?\*/\}}m, "")
   src.scan(%r{</?text\b[^>]*>}).each do |tag|
     if tag.start_with?("</")
       depth -= 1
