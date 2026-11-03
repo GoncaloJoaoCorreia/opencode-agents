@@ -231,3 +231,13 @@ Print a compact cycle report: slug, branch/worktree, per-phase status, commits (
 per-task gate verdicts (`tasks[i].audit` / `tasks[i].qa`), audit/review/qa verdicts, PR URL
 (`state.pr.url`) when the pr phase ran, plan dir path, and any warnings (e.g. `.plan/` not
 gitignored).
+
+In addition to printing it, PERSIST the same report as Markdown to
+`".plan/<slug>/report.md"` (validate the slug against `^[A-Z][A-Z0-9]*-[0-9]+$` before any
+path use; quote the path in shell) and record `state.report = ".plan/<slug>/report.md"` via
+the installed `"$SCRIPTS/driver-state.py" set "$statePath" report '".plan/<slug>/report.md"'`
+(driver-conventions §8 — SCRIPTS path, merge never clobbers). Write the report content with
+the edit tool / a file write, never by interpolating it into a shell command (it contains
+issue titles etc.). The report is rewritten at the end of every cycle — an idempotent
+overwrite of the driver's own scratch file under `.plan/` is fine; `--phases` subsets that
+never reach this step simply leave no `report.md` behind.

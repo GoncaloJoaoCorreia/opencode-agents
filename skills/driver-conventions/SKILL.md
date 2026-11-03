@@ -76,6 +76,9 @@ Schema: `references/state.schema.json`. Key rules:
   `review.fixes[]` are always cycle-scope: `{ round, commit, finding_ids[] }`.
 - `qa.log` = path to the full log (`.plan/<slug>/qa.log`); `qa.log_excerpt` = short tail
   kept inline; `qa.failures[] = { title, file?, line?, excerpt }`.
+- `report` = path to the final run report (`.plan/<slug>/report.md`), written by the driver
+  at cycle end (agents/driver.md §7) in addition to printing it, and recorded via
+  `driver-state.py set`.
 - **Per-task gating (always on):**
   the driver's implement fan-out wraps each task before moving to the next:
   `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`) with

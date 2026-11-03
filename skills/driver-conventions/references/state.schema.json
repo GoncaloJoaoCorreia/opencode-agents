@@ -319,7 +319,8 @@
         "forge": { "enum": ["github", "gitlab", "forgejo"], "description": "forge the PR/MR was opened on" },
         "cli": { "type": ["string", "null"], "enum": ["gh", "glab", "fj", null], "description": "forge CLI used (fj = forgejo-cli)" }
       }
-    }
+    },
+    "report": { "type": "string", "description": "path to the final run report, .plan/<slug>/report.md, written by the driver at cycle end" }
   },
   "additionalProperties": true
 }
