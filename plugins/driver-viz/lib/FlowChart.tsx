@@ -284,9 +284,10 @@ export function DriverSection(props: {
                       </span>
                     </Show>
                     <Show when={phase.id === "plan" && status() === "done"}>
-                      <text onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
-                        <span style={{ fg: c().accent }}>{"  [Open Plan]"}</span>
-                      </text>
+                      {/* span, not text: a <text> is not a valid child of a <text> node */}
+                      <span style={{ fg: c().accent }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        {"  [Open Plan]"}
+                      </span>
                     </Show>
                   </text>
                   <Show

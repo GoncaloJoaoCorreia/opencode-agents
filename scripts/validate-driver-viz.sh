@@ -69,6 +69,26 @@ failures << "missing #{shot} (regenerate: python3 #{gen})" unless File.exist?(sh
 failures << "missing #{gen}" unless File.exist?(gen)
 failures << "#{gen} must not live under plugins/ (it would ship in the release payload)" if File.exist?("plugins/driver-viz/scripts/screenshot.py")
 
+# invariant: <text> must never nest inside <text> — a TextRenderable is not a valid
+# TextNodeRenderable child (regression: G-21 "[Open Plan]" crashed the sidebar slot
+# with "TextNodeRenderable only accepts strings, TextNodeRenderable instances, or
+# StyledText instances"; use <span onMouseDown> inside <text> instead)
+Dir.glob("plugins/driver-viz/**/*.tsx").each do |f|
+  depth = 0
+  # strip JSX comments first — they may mention tags literally
+  src = File.read(f).gsub(%r{\{/\*.*?\*/\}}, "")
+  src.scan(%r{</?text\b[^>]*>}).each do |tag|
+    if tag.start_with?("</")
+      depth -= 1
+      failures << "#{f}: unbalanced </text>" if depth.negative?
+    else
+      depth += 1
+      failures << "#{f}: nested <text> inside <text> (invalid in OpenTUI; use <span>)" if depth > 1
+    end
+  end
+  failures << "#{f}: unclosed <text>" unless depth.zero?
+end
+
 if failures.empty?
   puts "ok: driver-viz package, entrypoint, phase-registry sync all valid"
 else
