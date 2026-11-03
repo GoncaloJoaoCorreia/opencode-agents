@@ -52,7 +52,8 @@ commands/phases/*.md        # standalone /phases/<phase> wrappers (subagent: tru
 skills/driver-conventions/  # THE single source of truth for all shared contracts
 agent-scripts/              # shipped helper scripts the driver agents call from <config>/agent-scripts/
                             #   (detect-forge.sh = forge detection, detect-modules.py = module detection,
-                            #    driver-state.py = atomic state.json access; tests in agent-scripts/tests/,
+                            #    driver-state.py = atomic state.json access, save-linear-attachments.py =
+                            #    eager Linear attachment download (G-23); tests in agent-scripts/tests/,
                             #    gated by scripts/validate.sh)
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
 docs/                       # repo-only docs (NOT in the release payload): driver-viz-sidebar.png = the README screenshot

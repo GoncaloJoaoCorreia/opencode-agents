@@ -167,5 +167,6 @@ jobs:
           test -f "$t/cfg/agent-scripts/detect-forge.sh"
           test -f "$t/cfg/agent-scripts/driver-state.py"
           test -f "$t/cfg/agent-scripts/detect-modules.py"
+          test -f "$t/cfg/agent-scripts/save-linear-attachments.py"
           test -f "$t/cfg/opencode-agents.manifest"
           echo "self-test OK: release $tag verifies and installs"
