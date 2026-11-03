@@ -30,7 +30,22 @@
         "ref": { "type": "string", "description": "issue key, file path, or slug" },
         "title": { "type": "string" },
         "url": { "type": "string" },
-        "spec_file": { "type": "string", "description": ".plan/<slug>/spec.md when source=prompt" }
+        "spec_file": { "type": "string", "description": ".plan/<slug>/spec.md — source=prompt, and source=linear (full issue body with local attachment links, G-23)" },
+        "attachments": {
+          "type": "array",
+          "description": "per-attachment download results for linear sources (G-23), recorded by preplan/plan via save-linear-attachments.py",
+          "items": {
+            "type": "object",
+            "required": ["url", "status"],
+            "properties": {
+              "url": { "type": "string", "description": "original remote URL (empty string for unparseable <linear-image> blocks)" },
+              "local": { "type": "string", "description": "local relative path (attachments/<name>) when downloaded or already present" },
+              "title": { "type": "string" },
+              "status": { "enum": ["downloaded", "failed", "skipped"], "description": "downloaded = saved under .plan/<slug>/attachments/; skipped = host not allowed / already exists / unparseable; failed = download error" },
+              "error": { "type": "string", "description": "download error message (failed) or skip reason (skipped), e.g. exists|host-not-allowed|unparseable" }
+            }
+          }
+        }
       }
     },
     "repo_root": { "type": "string", "description": "absolute path from git rev-parse --show-toplevel" },

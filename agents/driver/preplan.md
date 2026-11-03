@@ -50,8 +50,46 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
    - If the issue is not found or the server is unreachable, record WHY first —
      `state.spec.error = "issue not found"` or `"linear server unreachable: <error>"` —
      then ask via `question`: treat the key as a plain slug, or paste the spec?
-   - Record `state.spec = { source: "linear", ref: <key>, title, url }`. Keep any excerpt SHORT —
-     the full description stays in Linear; later phases re-fetch what they need.
+   - Persist the full fetched issue and eagerly download its Linear-hosted attachments
+     (G-23: signed uploads.linear.app URLs expire minutes after the fetch, so links kept
+     only in Linear die with "Download failed"). `planDir=".plan/<slug>"` (same as
+     `$(dirname "$statePath")`):
+     - Write the fetched issue description + comments to `$planDir/issue.md` with the
+       edit tool (`.plan/**` is allowed) — never via shell interpolation of issue text.
+     - Write `issue.attachments[]` (url/title pairs) as a JSON array to
+       `$planDir/attachment-urls.json` — URLs travel via `--urls-file`, never via argv.
+     - Run the installed script; define the scripts dir defensively and fail clearly when
+       it is missing, exactly like step 4 does for detect-forge.sh:
+       `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"` — if
+       `[ ! -x "$SCRIPTS/save-linear-attachments.py" ]`, stop with "agent-scripts not
+       installed — re-run install.sh". Then run
+       `"$SCRIPTS/save-linear-attachments.py" --markdown "$planDir/issue.md" --out "$planDir/attachments" --spec-out "$planDir/spec.md" --urls-file "$planDir/attachment-urls.json"`
+       (quote everything) and capture the single-line JSON stdout. On a non-zero exit,
+       surface the script's stderr and exit code to the driver and stop — never swallow
+       them (exit 0 with per-file failures in `failed[]` is a valid result; exit 2 is an
+       error with empty stdout). The script writes the rewritten markdown to
+       `$planDir/spec.md`: downloaded URLs become local `attachments/...` links, failed or
+       skipped URLs keep the original remote URL.
+     - Merge the result into state via `driver-state.py` (§8): save the captured stdout to
+       `$planDir/attachments-result.json`, then build `$planDir/spec-attachments.patch.json`
+       from that file with a short python3-stdlib snippet (no jq — pass only FILE PATHS as
+       arguments, never the JSON content, into a command) emitting
+       `{ "spec": { "spec_file": ".plan/<slug>/spec.md", "attachments": [ ... ] } }`, where
+       `attachments[]` combines the script's `downloaded[]` / `skipped[]` / `failed[]`
+       into `{ url, local?, title?, status: "downloaded"|"skipped"|"failed", error? }`
+       entries; then
+       `"$SCRIPTS/driver-state.py" merge "$statePath" "$planDir/spec-attachments.patch.json"`.
+       Have the same snippet write one JSON string per `failed[]` entry to
+       `$planDir/attachment-warnings.jsonl` —
+       `attachment download failed for <slug>: <url> (<error>) — the original (possibly
+       expired) link is kept in spec.md` — and push each line as a warning:
+       `while IFS= read -r w; do "$SCRIPTS/driver-state.py" push "$statePath" warnings "$w"; done < "$planDir/attachment-warnings.jsonl"`
+       (each line is a complete JSON string read from the file — no untrusted text is
+       interpolated into a command).
+   - Record `state.spec = { source: "linear", ref: <key>, title, url }` (merge, never
+     clobber — the merge above already added `spec_file`/`attachments`). Keep any excerpt
+     SHORT; the full description + comments now live in `.plan/<slug>/spec.md`, and later
+     phases read that file instead of re-fetching.
    - Else, if `issueOrSpec` is a path to an existing file: read it,
      `state.spec = { source: "file", ref: <path>, title: <first heading> }`.
    - Else: write the raw spec to `.plan/<slug>/spec.md` and record

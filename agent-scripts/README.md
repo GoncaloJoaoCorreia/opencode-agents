@@ -11,8 +11,8 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/
 ## Prerequisites
 
 - POSIX `sh` and `git` (assumed present)
-- `python3` (hard prerequisite for `driver-state.py` and `detect-modules.py`; the
-  installer hard-fails without it)
+- `python3` (hard prerequisite for `driver-state.py`, `detect-modules.py` and
+  `save-linear-attachments.py`; the installer hard-fails without it)
 - No `jq`, no third-party Python packages — all scripts are stdlib/POSIX only.
 
 ## detect-forge.sh
@@ -161,6 +161,77 @@ root itself is not a module entry.
 - `2` — error (unknown flag, unreadable repo, file outside repo): message on
   stderr, stdout stays EMPTY (pure JSON on success paths only)
 
+## save-linear-attachments.py
+
+Eagerly downloads Linear-hosted attachment URLs found in a fetched issue's
+markdown and rewrites the markdown to local links — Linear serves attachments
+as short-lived signed `uploads.linear.app` URLs that expire ("Download
+failed"), so the driver persists `.plan/<slug>/spec.md` with the links already
+rewritten to local `attachments/...` files (G-23). python3 stdlib only,
+executable, shebang `#!/usr/bin/env python3`.
+
+### Invocation
+
+```
+save-linear-attachments.py --markdown FILE --out DIR --spec-out FILE
+    [--urls-file FILE] [--url URL ...] [--allowed-hosts H1,H2] [--refresh] [--help]
+```
+
+- `--markdown FILE` — fetched issue markdown (description and/or comments) to
+  scan; must be readable, else exit 2
+- `--out DIR` — attachment output dir (e.g. `.plan/<slug>/attachments`);
+  created when missing
+- `--spec-out FILE` — where the rewritten markdown is written
+- `--urls-file FILE` — JSON file with extra URLs: an array of strings or
+  `{ "url": ..., "title": ... }` objects (this is how `issue.attachments[]` is
+  passed, so no untrusted text is ever interpolated into a shell command by
+  callers)
+- `--url URL` — repeatable extra URL (convenience/tests)
+- `--allowed-hosts H1,H2` — comma-separated host allowlist, default
+  `uploads.linear.app`; URLs on other hosts land in `skipped[]` with reason
+  `host-not-allowed` and are NOT rewritten
+- `--refresh` — re-download even when the local file already exists; default is
+  skip-if-exists (reason `exists`, the link is still rewritten) for idempotent
+  resume
+- `--help` — usage on stdout, exit 0
+
+### URL extraction, download and rewrite
+
+- `<linear-image>{...}</linear-image>` blocks → the embedded JSON's `attrs.src`
+  (and `attrs.title` as filename hint); malformed JSON blocks land in
+  `skipped[]` with reason `unparseable` and are left unchanged
+- standard markdown images `![alt](URL)`; only http/https URLs are candidates
+- download via `urllib.request` with a 30s timeout and a plain User-Agent;
+  content is written as raw bytes as received
+- local name = sanitized title / URL basename (`[A-Za-z0-9._-]` only, path
+  traversal stripped); the extension is derived from the Content-Type when the
+  name has none (fallback `.bin`); name collisions get `-2`, `-3`, … suffixes
+- the full URL incl. query/signature is what gets downloaded; the local name
+  comes from the title/basename, not the query
+- each successfully downloaded (or already existing) URL is replaced
+  everywhere in the markdown with the relative link `attachments/<name>`;
+  failed or skipped URLs keep the original remote URL; duplicate URLs in one
+  markdown are downloaded once and every occurrence is rewritten
+
+### Output contract
+
+Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
+
+```json
+{ "spec_out": "...", "attachments_dir": "...",
+  "downloaded": [ { "url": "...", "local": "attachments/image.png", "title": "image.png" } ],
+  "skipped":    [ { "url": "...", "reason": "exists|host-not-allowed|unparseable|scheme-not-allowed" } ],
+  "failed":     [ { "url": "...", "error": "..." } ] }
+```
+
+### Exit codes
+
+- `0` — whenever the inputs are readable; per-file failures live in `failed[]`
+  and never abort (failed URLs keep their remote URL in the rewritten markdown)
+- `2` — misuse (unknown flag, unreadable `--markdown` / `--urls-file`, unusable
+  `--out`): message on stderr, stdout stays EMPTY (pure JSON on success paths
+  only)
+
 ## Tests
 
 ```
@@ -175,6 +246,13 @@ round-trips, never-delete merge, slug/path guard, atomicity, error paths), and
 `tests/test-detect-modules.py` (unittest with fixture repos: Gradle/Maven/npm/
 Cargo detection + precedence order, fallback depth rule incl. the `src/` extra
 level, root-file and nested-file mapping, CLI contract, exit codes 0/2 with empty
-stdout on error), plus `sh -n` / `py_compile` syntax checks. Exits non-zero on
-any failure; prints `ok: detect-forge tests` / `ok: driver-state tests` /
-`ok: detect-modules tests` per suite.
+stdout on error), `tests/test-save-linear-attachments.py` (unittest with a
+local `http.server` stub on `127.0.0.1`, ephemeral port — no external network:
+`<linear-image>` and markdown-image extraction, host allowlist, download +
+rewrite to `attachments/...` links, filename sanitize/dedupe, Content-Type
+extensions, skip-if-exists vs `--refresh`, failed downloads keeping the remote
+URL, `--urls-file` with strings and `{url,title}` objects, single-line JSON
+stdout, exit codes 0/2, `--help`), plus `sh -n` / `py_compile` syntax checks.
+Exits non-zero on any failure; prints `ok: detect-forge tests` /
+`ok: driver-state tests` / `ok: detect-modules tests` /
+`ok: save-linear-attachments tests` per suite.

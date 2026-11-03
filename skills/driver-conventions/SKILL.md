@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -55,9 +55,14 @@ Schema: `references/state.schema.json`. Key rules:
 - Never delete information — append/merge (every update goes through the installed
   `driver-state.py` — see §8). Re-runs resume from this file.
 - Summaries are SHORT (a few lines). Big content lives in files under `.plan/<slug>/`
-  (`spec.md`, `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`,
+  (`spec.md`, `attachments/`, `plan.md`, `manifest.json`, `tasks/*.md`, `qa.log`,
   `audit-round-<n>.md`), referenced by path — never inline evidence or log tails beyond a
   short excerpt.
+- `spec = { source: linear|prompt|file, ref, title?, url?, spec_file?, attachments? }` —
+  `spec_file` = `.plan/<slug>/spec.md` (source=prompt, and source=linear: the full fetched
+  issue body with downloaded attachments rewritten to local links — G-23);
+  `attachments[]` = `{ url, local?, title?, status: downloaded|failed|skipped, error? }` —
+  the per-attachment download results preplan/plan record for linear sources.
 - `phases.<name> = { status: pending|running|done|failed|skipped, summary, started_at, completed_at }`.
   `skipped` is set by `--skip` (`params.skip[]`) or by preplan's "skip quality-gate" choice.
   This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
@@ -109,7 +114,11 @@ Schema: `references/state.schema.json`. Key rules:
 
 ## 2. Plan artifacts — `.plan/<slug>/`
 
-- `spec.md` — the raw spec when it didn't come from Linear.
+- `spec.md` — the raw spec (source=prompt), and for `source: "linear"` the full fetched
+  issue body (description + comments) with downloaded attachments rewritten to local
+  `attachments/...` links (G-23).
+- `attachments/` — `.plan/<slug>/attachments/`, the eagerly downloaded Linear issue
+  attachments (G-23), referenced by the rewritten links in `spec.md`.
 - `plan.md` — human-readable plan.
 - `manifest.json` — machine-readable plan. Schema: `references/manifest.schema.json`.
   Per task: `id` (slug), `title`, `file` (`tasks/<id>.md`), `depends_on`, `files` (globs the
@@ -281,7 +290,7 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
   `skipped`/`failed` with a clear summary; never push anywhere else.
 - Record `state.pr = { number, url, base, head, title, draft, forge, cli }` in `state.json`.
 
-## 8. Agent scripts (installed payload — the mechanism behind §1 state writes and §7.1 forge detection)
+## 8. Agent scripts (installed payload — the mechanism behind §1 state writes, §2 spec.md/attachments persistence (G-23) and §7.1 forge detection)
 
 `install.sh` ships the repo's `agent-scripts/` directory into the config dir, so every phase
 addresses the scripts at the INSTALLED path — never the repo path:
@@ -291,9 +300,9 @@ SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"
 ```
 
 If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/detect-modules.py"` /
-`"$SCRIPTS/driver-state.py"` is missing or not executable,
-stop with a clear "agent-scripts not installed — re-run install.sh" error. Prerequisites:
-POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
+`"$SCRIPTS/driver-state.py"` / `"$SCRIPTS/save-linear-attachments.py"` is missing or not
+executable, stop with a clear "agent-scripts not installed — re-run install.sh" error.
+Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
 
 - **`detect-forge.sh`** — forge detection. §7.1 stays the SEMANTICS (the contract); this
   script is the MECHANISM. Invocation:
@@ -342,6 +351,36 @@ POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
   - Exit codes: `0` = one JSON object on stdout; `2` = error (bad flag, unreadable repo,
     file outside repo) with a message on stderr and EMPTY stdout. `--help` → usage on
     stdout, exit 0.
+- **`save-linear-attachments.py`** — eager download of Linear-hosted attachment URLs
+  (G-23): the MECHANISM behind persisting `.plan/<slug>/spec.md` for linear sources with
+  working attachment links (their signed uploads.linear.app URLs expire minutes after the
+  fetch). python3 stdlib only. Invocation:
+  `"$SCRIPTS/save-linear-attachments.py" --markdown FILE --out DIR --spec-out FILE [--urls-file FILE] [--url URL ...] [--allowed-hosts H1,H2] [--refresh]`
+  - `--markdown FILE` = the fetched issue markdown to scan; `--out DIR` = the attachment
+    dir (e.g. `.plan/<slug>/attachments`, created when missing); `--spec-out FILE` = where
+    the rewritten markdown is written; `--urls-file FILE` = a JSON array of strings or
+    `{ "url": ..., "title": ... }` objects — this is how `issue.attachments[]` is passed,
+    so no untrusted text is ever interpolated into a shell command by callers;
+    `--allowed-hosts` defaults to `uploads.linear.app` (URLs on other hosts land in
+    `skipped[]` with reason `host-not-allowed` and are NOT rewritten); `--refresh`
+    re-downloads, the default is skip-if-exists (reason `exists`, the link is still
+    rewritten) for idempotent resume.
+  - Extracts `<linear-image>{...}</linear-image>` `attrs.src` URLs and `![alt](URL)`
+    http(s) images plus the `--urls-file` / `--url` extras, downloads them into `--out`
+    (sanitized, collision-deduped file names; the extension comes from the Content-Type
+    when the name has none), and rewrites each downloaded or already-existing URL in the
+    markdown to the relative link `attachments/<name>`; failed or skipped URLs keep the
+    original remote URL.
+  - Prints exactly ONE JSON object (one line) on stdout:
+    `{ "spec_out": "...", "attachments_dir": "...", "downloaded": [ { "url", "local", "title" } ], "skipped": [ { "url", "reason" } ], "failed": [ { "url", "error" } ] }`.
+  - Exit codes: `0` whenever the inputs are readable (per-file failures live in `failed[]`
+    and never abort), `2` = misuse / unreadable `--markdown` / `--urls-file` / unusable
+    `--out` with a message on stderr and EMPTY stdout. `--help` → usage on stdout, exit 0.
+  - preplan/plan call it at spec-fetch time (linear sources) and merge `spec.spec_file` +
+    `spec.attachments[]` — the script's `downloaded[]` / `skipped[]` / `failed[]` combined
+    into `{ url, local?, title?, status: downloaded|skipped|failed, error? }` entries —
+    into state via `driver-state.py`, pushing one `state.warnings` entry per failed
+    download.
 - **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
   `driver-state.py merge "$statePath" patch.json`,
   `driver-state.py push "$statePath" implement.runs "$entryJson"`,
