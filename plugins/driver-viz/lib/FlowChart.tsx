@@ -279,8 +279,12 @@ export function DriverSection(props: {
                           Padding stays outside the underlined span so the underline
                           only covers the label, not the leading spaces. */}
                       <span style={{ fg: c().muted }}>{"  "}</span>
-                      <span style={{ fg: c().link, underline: true }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
-                        {"[Open Plan]"}
+                      {/* underline only the label — brackets stay plain (nested span
+                          inherits fg, ORs attributes) */}
+                      <span style={{ fg: c().link }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        {"["}
+                        <span style={{ underline: true }}>Open Plan</span>
+                        {"]"}
                       </span>
                     </Show>
                   </text>
@@ -343,7 +347,11 @@ export function DriverSection(props: {
             <Show when={existsSync(reportFilePath(r()))}>
               <text onMouseDown={() => props.onOpenPath(reportFilePath(r()))}>
                 <span style={{ fg: c().muted }}>{"  "}</span>
-                <span style={{ fg: c().link, underline: true }}>{"[Open report]"}</span>
+                <span style={{ fg: c().link }}>
+                  {"["}
+                  <span style={{ underline: true }}>Open report</span>
+                  {"]"}
+                </span>
               </text>
             </Show>
           </Show>

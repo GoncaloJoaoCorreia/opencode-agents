@@ -71,7 +71,7 @@ LINES = [
     [("◆ DRIVER ", ACCENT, True), ("ABC-123", MUTED, False), ("  ⏱ 12m34s", MUTED, False), ("  1/2", MUTED, False)],
     [("✓ ", SUCCESS, False), ("Preplan", BASE, False)],
     [("│", BORDER, False)],
-    [("✓ ", SUCCESS, False), ("Plan", BASE, False), ("  ", MUTED, False), ("[Open Plan]", MUTED, False, True)],
+    [("✓ ", SUCCESS, False), ("Plan", BASE, False), ("  ", MUTED, False), ("[", MUTED, False), ("Open Plan", MUTED, False, True), ("]", MUTED, False)],
     [("│", BORDER, False)],
     [("⠋ ", ACCENT, True), ("Implement", BASE, True), ("  2/3", MUTED, False)],
     [("  ", MUTED, False), ("●●", SUCCESS, False), ("○", MUTED, False)],
