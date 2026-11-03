@@ -18,6 +18,25 @@ else
   echo "skip: shellcheck not installed"
 fi
 
+echo "== install.sh excludes .agent/ and __pycache__ from the payload =="
+# regression test: this repo's own driver history (agents/.agent/ etc.) and bytecode
+# caches must never be installed — OpenCode discovers agents/**/*.md recursively, so an
+# installed .agent/*.md would be registered as an agent (".agent/history" etc.)
+install_tmp=$(mktemp -d)
+trap 'rm -rf "$install_tmp"' EXIT
+./install.sh --source --dest "$install_tmp/cfg" >/dev/null
+if find "$install_tmp/cfg" -type d \( -name .agent -o -name __pycache__ \) | grep -q .; then
+  echo "FAIL: .agent/ or __pycache__/ installed into $install_tmp/cfg:" >&2
+  find "$install_tmp/cfg" -type d \( -name .agent -o -name __pycache__ \) >&2
+  exit 1
+fi
+if grep -Eq '(^|/)(\.agent|__pycache__)/' "$install_tmp/cfg/opencode-agents.manifest"; then
+  echo "FAIL: manifest lists .agent/ or __pycache__ entries:" >&2
+  grep -E '(^|/)(\.agent|__pycache__)/' "$install_tmp/cfg/opencode-agents.manifest" >&2
+  exit 1
+fi
+echo "ok: no .agent/ or __pycache__/ in installed payload or manifest"
+
 echo "== asset convention files =="
 for f in install.sh agents commands skills snippets plugins agent-scripts; do
   [ -e "$f" ] || { echo "FAIL: missing $f" >&2; exit 1; }

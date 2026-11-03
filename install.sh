@@ -16,7 +16,11 @@
 # plugins/ into the config dir. Each install writes opencode-agents.version and
 # opencode-agents.manifest into the target; the manifest drives stale-file cleanup on
 # reinstall. Nothing outside agents/ commands/ skills/ agent-scripts/ plugins/
-# (unless --no-plugin) and those two meta files is ever touched. plugins/driver-viz is
+# (unless --no-plugin) and those two meta files is ever touched. .agent/ dirs inside
+# the payload (this repo's own driver history) and __pycache__/ are EXCLUDED from the
+# manifest and the install: OpenCode discovers agents/**/*.md recursively, so an
+# installed agents/.agent/*.md would be registered as agents (".agent/history" etc.).
+# plugins/driver-viz is
 # auto-discovered by OpenCode from <config>/plugins/driver-viz/ — no cli.json edit
 # needed. agent-scripts/ holds the driver helper scripts (detect-forge.sh,
 # detect-modules.py, driver-state.py, save-linear-attachments.py) that the driver
@@ -165,9 +169,10 @@ install_payload() {
   if [ "$want_plugins" = "1" ]; then
     dirs="$dirs plugins"
   fi
-  # -L so symlinked placeholder agents (plan-thorough.md) are listed too
+  # -L so symlinked placeholder agents (plan-thorough.md) are listed too.
+  # Exclude .agent/ (driver history — would be discovered as agents) and __pycache__/
   # shellcheck disable=SC2086  # $dirs is an intentional word list
-  (cd "$payload" && find -L $dirs -type f | LC_ALL=C sort) > "$new_list"
+  (cd "$payload" && find -L $dirs -type f ! -path '*/.agent/*' ! -path '*/__pycache__/*' | LC_ALL=C sort) > "$new_list"
 
   # manifest-based clean: remove previously installed files that no longer exist upstream
   if [ -f "$old_manifest" ]; then
@@ -198,6 +203,15 @@ install_payload() {
     mkdir -p "$DEST/plugins"
     cp -RL "$payload/plugins/." "$DEST/plugins/"
   fi
+
+  # strip driver-history + bytecode dirs that cp -RL carried along: OpenCode
+  # discovers agents/**/*.md recursively, so an installed .agent/*.md would be
+  # registered as an agent. Also cleans leftover empty dirs from older installs
+  # (the stale-file loop above already rm -f's the manifest-listed files in them).
+  # shellcheck disable=SC2086  # $dirs is an intentional word list
+  for d in $dirs; do
+    rm -rf "$DEST/$d/.agent" "$DEST/$d/__pycache__"
+  done
 
   mv "$new_list" "$old_manifest"
   printf '%s\n' "$version" > "$DEST/opencode-agents.version"

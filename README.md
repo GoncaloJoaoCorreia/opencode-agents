@@ -53,6 +53,11 @@ Re-run it after pulling changes.
   `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
   that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
   `agent-scripts/`, `plugins/` (unless `--no-plugin`) and those two meta files.
+- **`.agent/` and `__pycache__/` are never installed.** This repo is itself a driver
+  target, so it contains `agents/.agent/`, `skills/.agent/`, … (driver history) — OpenCode
+  discovers `agents/**/*.md` recursively, so shipping them would register
+  `.agent/history` / `.agent/decisions` as agents. The release tarball and the installer
+  both strip them; re-running the installer also removes previously installed copies.
 - **Driver helper scripts.** `agent-scripts/` installs to
   `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the four scripts
   the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,

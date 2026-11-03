@@ -32,6 +32,14 @@ plugin, both including the agent-scripts unit suite).
   config dir; the manifest drives stale-file cleanup on reinstall. Installs only touch
   `agents/ commands/ skills/ agent-scripts/ plugins/` (plugins/ only without
   `--no-plugin`) + those two meta files.
+- **`.agent/` and `__pycache__/` inside the payload dirs are excluded** from the release
+  tarball and the install (manifest list + `rm -rf` after the copy). This repo is itself a
+  driver target, so it has `agents/.agent/`, `skills/.agent/`, … — OpenCode discovers
+  `agents/**/*.md` recursively, so an installed `agents/.agent/*.md` would register as
+  agents (`.agent/history`, `.agent/decisions`). `scripts/validate.sh` regression-tests
+  the exclusion by running `install.sh --source` into a temp dir; release.yml's self-test
+  asserts it on the downloaded payload. Re-running `./install.sh` also cleans previously
+  installed copies via the manifest stale-file loop.
 - Install is **copy-based on purpose** (`cp -RL`): do NOT symlink these dirs into
   `~/.config/opencode/` or `.opencode/` — OpenCode's discovery skips symlinked agent files
   (e.g. the `agents/driver/plan-thorough.md` symlink placeholder won't register).
