@@ -17,16 +17,20 @@ from the agent-declaration validation in `scripts/validate.sh`).
   `${XDG_CONFIG_HOME:-~/.config}/opencode`), `--no-plugin` skips the driver-viz plugin
   (and removes a previously installed copy via manifest cleanup). **Re-run `./install.sh`
   after every edit here** — OpenCode reloads config automatically, no restart.
+- **Prerequisite check:** `install.sh` hard-fails before installing (and before downloading
+  in `--release` mode) when `python3` cannot execute or `git` is missing — the shipped
+  `agent-scripts/` need both. Optional tools (a forge CLI `gh`/`glab`/`forgejo-cli`,
+  `shellcheck`) only produce a warning when absent.
 - **Release assets convention:** each GitHub release carries exactly `opencode-agents.tar.gz`
-  (one top-level `opencode-agents/` dir with `agents/ commands/ skills/ snippets/ plugins/
-  install.sh LICENSE`) and `SHA256SUMS` (sha256sum format). The installer fetches them
+  (one top-level `opencode-agents/` dir with `agents/ commands/ skills/ snippets/
+  agent-scripts/ plugins/ install.sh LICENSE`) and `SHA256SUMS` (sha256sum format). The installer fetches them
   unauthenticated from `releases/latest/download/` (the repo is public). **Releases are cut
   by the Release workflow (see Releases below), which builds and uploads these assets** —
   don't hand-upload them; v0.1 was seeded manually before the workflow existed.
 - Each install writes `opencode-agents.version` + `opencode-agents.manifest` into the
   config dir; the manifest drives stale-file cleanup on reinstall. Installs only touch
-  `agents/ commands/ skills/ plugins/` (plugins/ only without `--no-plugin`) + those two
-  meta files.
+  `agents/ commands/ skills/ agent-scripts/ plugins/` (plugins/ only without
+  `--no-plugin`) + those two meta files.
 - Install is **copy-based on purpose** (`cp -RL`): do NOT symlink these dirs into
   `~/.config/opencode/` or `.opencode/` — OpenCode's discovery skips symlinked agent files
   (e.g. the `agents/driver/plan-thorough.md` symlink placeholder won't register).
@@ -45,6 +49,9 @@ agents/driver/*.md          # phase subagents (driver/preplan, driver/plan, driv
 commands/driver.md          # /driver entry point (static `!` shell blocks — see gotchas)
 commands/phases/*.md        # standalone /phases/<phase> wrappers (subagent: true)
 skills/driver-conventions/  # THE single source of truth for all shared contracts
+agent-scripts/              # shipped helper scripts the driver agents call from <config>/agent-scripts/
+                            #   (detect-forge.sh = forge detection, driver-state.py = atomic state.json
+                            #    access; tests in agent-scripts/tests/, gated by scripts/validate.sh)
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
 docs/                       # repo-only docs (NOT in the release payload): driver-viz-sidebar.png = the README screenshot
 plugins/driver-viz/         # TUI-only plugin: animated sidebar flow chart of the current run

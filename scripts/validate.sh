@@ -1,7 +1,9 @@
 #!/bin/sh
 # Pre-release validation for opencode-agents.
 # Used by .github/workflows/release.yml; also runnable locally: ./scripts/validate.sh
-# Requires: sh, ruby (with psych/yaml + json stdlib). shellcheck is optional (skipped if absent).
+# Requires: sh, ruby (with psych/yaml + json stdlib), python3 (agent-scripts are a
+# shipped payload — CI on ubuntu-latest has it preinstalled). shellcheck is optional
+# (skipped if absent).
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -17,10 +19,26 @@ else
 fi
 
 echo "== asset convention files =="
-for f in install.sh agents commands skills snippets plugins; do
+for f in install.sh agents commands skills snippets plugins agent-scripts; do
   [ -e "$f" ] || { echo "FAIL: missing $f" >&2; exit 1; }
 done
-echo "ok: install.sh + agents/ commands/ skills/ snippets/ plugins/ present"
+echo "ok: install.sh + agents/ commands/ skills/ snippets/ plugins/ agent-scripts/ present"
+
+echo "== agent-scripts =="
+command -v python3 >/dev/null 2>&1 || { echo "FAIL: python3 is required (agent-scripts/driver-state.py) but not found" >&2; exit 1; }
+for s in agent-scripts/*.sh; do
+  sh -n "$s"
+done
+echo "ok: sh -n agent-scripts/*.sh"
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck agent-scripts/*.sh
+  echo "ok: shellcheck agent-scripts/*.sh"
+else
+  echo "skip: shellcheck not installed"
+fi
+python3 -m py_compile agent-scripts/*.py
+echo "ok: py_compile agent-scripts/*.py"
+sh agent-scripts/tests/run-tests.sh
 
 command -v ruby >/dev/null 2>&1 || { echo "FAIL: ruby is required for validation" >&2; exit 1; }
 
@@ -115,6 +133,12 @@ preplan_lin = linear_lines.call("agents/driver/preplan.md")
 plan_lin = linear_lines.call("agents/driver/plan.md")
 if preplan_lin.empty? || plan_lin.empty? || preplan_lin != plan_lin
   failures << "agents/driver/preplan.md and agents/driver/plan.md: linear-project permission blocks differ (or missing) — keep them byte-identical"
+end
+
+# invariant 5: the shipped driver-state.py carries the slug regex (its .plan/<slug>
+# path guard validates slugs against it)
+unless File.read("agent-scripts/driver-state.py").include?(SLUG_RE)
+  failures << "agent-scripts/driver-state.py: missing slug regex #{SLUG_RE}"
 end
 
 if failures.empty?

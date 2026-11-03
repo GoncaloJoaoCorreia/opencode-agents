@@ -35,9 +35,11 @@ curl -fsSL https://raw.githubusercontent.com/GoncaloJoaoCorreia/opencode-agents/
 
 The installer downloads the latest GitHub release payload (`opencode-agents.tar.gz`),
 verifies it against the release's `SHA256SUMS`, and installs `agents/`, `commands/`,
-`skills/` and `plugins/` into `~/.config/opencode/` (or `$XDG_CONFIG_HOME/opencode`).
-OpenCode reloads config automatically — no restart needed. Pass `--no-plugin` to skip the
-driver-viz sidebar plugin.
+`skills/`, `agent-scripts/` and `plugins/` into `~/.config/opencode/` (or
+`$XDG_CONFIG_HOME/opencode`). OpenCode reloads config automatically — no restart needed.
+Pass `--no-plugin` to skip the driver-viz sidebar plugin. The installer requires `python3`
+and `git` (hard prerequisite — it fails with a clear message otherwise; see
+[Requirements & limitations](#requirements--limitations)).
 
 Working in a local checkout of this repo? Run `./install.sh` there instead — it detects the
 checkout and installs straight from source (same copy-based install; nothing is built).
@@ -49,7 +51,13 @@ Re-run it after pulling changes.
 - **Latest release only.** Each install stamps `opencode-agents.version` and writes
   `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
   that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
-  `plugins/` (unless `--no-plugin`) and those two meta files.
+  `agent-scripts/`, `plugins/` (unless `--no-plugin`) and those two meta files.
+- **Driver helper scripts.** `agent-scripts/` installs to
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the two scripts the
+  driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
+  mirroring `skills/driver-conventions/SKILL.md` §7.1) and `driver-state.py` (atomic,
+  merge-never-clobber access to `.plan/<slug>/state.json`). See `agent-scripts/README.md`
+  in this repo for their contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -210,6 +218,11 @@ final `pr` phase, which pushes the branch and opens the PR.
 
 ## Requirements & limitations
 
+- **Install requires `python3` and `git`.** `install.sh` hard-fails with a clear message
+  before installing (or downloading, in release mode) when `python3` cannot execute or
+  `git` is missing — the installed `agent-scripts/` (`driver-state.py`, `detect-forge.sh`)
+  need both. A forge CLI (`gh` / `glab` / `forgejo-cli`) is optional: only the `pr` phase
+  uses one, and it degrades gracefully (skips with a note) without it.
 - **Interactive TUI only.** The driver asks questions along the way (slug, plan approval,
   QA command, retries), so headless `opencode run` is not supported.
 - **Linear is used read-only** (`get_issue`, `list_comments`, …); the driver never comments
