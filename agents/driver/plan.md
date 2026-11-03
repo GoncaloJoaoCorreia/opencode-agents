@@ -80,7 +80,10 @@ permissions:
    `command` string; every `depends_on` entry
    references an existing task `id` (no dangling refs, no cycles). Fix the manifest and
    re-validate until clean — a malformed manifest poisons the implement fan-out.
-6. Update `state.json` (merge, never clobber): `plan.manifest`, `plan.tasks[] =
+6. Update `state.json` via the installed `driver-state.py` (driver-conventions §8 — merge,
+   never clobber; write the patch to a JSON file under `.plan/<slug>/` and run
+   `driver-state.py merge "$statePath" <patch.json>`, or `set`/`push` individual paths;
+   `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`): `plan.manifest`, `plan.tasks[] =
    { id, title, file, status: "pending" }`, `plan.risks`, `plan.assumptions[]` and
    `plan.open_questions[]` (string mirrors of the `## Assumptions` section and open questions
    in `plan.md`, so the driver's approval gate can surface them without reading the file),

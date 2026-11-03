@@ -44,7 +44,8 @@ reporting it. You are REPORT-ONLY: the driver spawns `driver/implement` for fixe
 6. **Assumptions check:** read `plan.md`'s `## Assumptions` (and `state.plan.assumptions[]`)
    — was any assumption invalidated by the implementation? If yes, add a `major` finding
    ("assumption X no longer holds: ...") so the plan gets corrected, not just the code.
-7. Write to `state.json` (merge, never clobber):
+7. Write to `state.json` via the installed `driver-state.py` (driver-conventions §8 —
+   merge, never clobber; `set`/`merge`/`push` with single-quoted JSON arguments):
    `state.review.rounds[round] = { round, findings, verdict }`,
    `state.review.verdict = "pass" | "fail"` — fail iff any finding has severity `blocker`
    or `major`; `minor`/`nit` are recorded as warnings (surfaced in the summary) and do NOT

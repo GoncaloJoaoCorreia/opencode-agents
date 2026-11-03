@@ -12,12 +12,19 @@
 #
 # Install target: --dest DIR, else ${XDG_CONFIG_HOME:-~/.config}/opencode.
 # The install is COPY-based on purpose (cp -RL): OpenCode's discovery does not follow
-# symlinked agent files, so never symlink agents/ commands/ skills/ plugins/ into the
-# config dir. Each install writes opencode-agents.version and opencode-agents.manifest
-# into the target; the manifest drives stale-file cleanup on reinstall. Nothing outside
-# agents/ commands/ skills/ plugins/ (unless --no-plugin) and those two meta files is
-# ever touched. plugins/driver-viz is auto-discovered by OpenCode from
-# <config>/plugins/driver-viz/ — no cli.json edit needed.
+# symlinked agent files, so never symlink agents/ commands/ skills/ agent-scripts/
+# plugins/ into the config dir. Each install writes opencode-agents.version and
+# opencode-agents.manifest into the target; the manifest drives stale-file cleanup on
+# reinstall. Nothing outside agents/ commands/ skills/ agent-scripts/ plugins/
+# (unless --no-plugin) and those two meta files is ever touched. plugins/driver-viz is
+# auto-discovered by OpenCode from <config>/plugins/driver-viz/ — no cli.json edit
+# needed. agent-scripts/ holds the driver helper scripts (detect-forge.sh,
+# driver-state.py) that the driver agents call from <config>/agent-scripts/.
+#
+# Prerequisites (checked before anything is installed, in both modes): POSIX sh, git
+# and python3 are REQUIRED (the installed agent-scripts/ need them) — the install
+# hard-fails with a clear message when python3 cannot run or git is missing. A forge
+# CLI (gh/glab/forgejo-cli) and shellcheck are optional and only produce a warning.
 set -eu
 unset CDPATH  # keep `cd` output clean when resolving SCRIPT_DIR below
 
@@ -40,9 +47,40 @@ Usage: install.sh [--source|--release] [--dest DIR] [--no-plugin] [-h|--help]
   --release    download + checksum-verify the latest GitHub release payload, then
                install from it (default when run standalone, e.g. via curl | sh)
   --dest DIR   install target (default: \${XDG_CONFIG_HOME:-~/.config}/opencode)
-  --no-plugin  skip the driver-viz TUI plugin (agents/ commands/ skills/ only);
-               also removes a previously installed copy
+  --no-plugin  skip the driver-viz TUI plugin (agents/ commands/ skills/
+               agent-scripts/ only); also removes a previously installed copy
+
+Installs: agents/ commands/ skills/ agent-scripts/ and (unless --no-plugin)
+plugins/ into the target dir.
+Requirements: POSIX sh, git and python3 (hard prerequisite — the install fails
+without them); gh/glab/forgejo-cli are optional (only the driver's pr phase
+needs one).
 EOF
+}
+
+# check_prereqs — hard-fail on missing required tools, warn on optional ones.
+# Runs in BOTH modes before anything is installed or downloaded (fail fast).
+check_prereqs() {
+  # python3 must actually EXECUTE (a broken stub on PATH must fail), not just exist
+  if ! python3 --version >/dev/null 2>&1; then
+    echo "install.sh: python3 is required (agent-scripts/driver-state.py needs it) but could not be executed" >&2
+    echo "  install python3 (e.g. 'brew install python3', 'apt install python3', ...) and re-run" >&2
+    exit 1
+  fi
+  if ! command -v git >/dev/null 2>&1; then
+    echo "install.sh: git is required (agent-scripts/detect-forge.sh reads the origin remote with it)" >&2
+    echo "  install git and re-run" >&2
+    exit 1
+  fi
+  # optional: a forge CLI is only needed by the driver's pr phase (it degrades
+  # gracefully without one), shellcheck only for local linting
+  if ! command -v gh >/dev/null 2>&1 && ! command -v glab >/dev/null 2>&1 \
+     && ! command -v forgejo-cli >/dev/null 2>&1 && ! command -v fj >/dev/null 2>&1; then
+    echo "install.sh: note: no forge CLI (gh/glab/forgejo-cli) found — optional; the driver's pr phase will skip pushing/opening the PR without one" >&2
+  fi
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "install.sh: note: shellcheck not found — optional (skipped in scripts/validate.sh)" >&2
+  fi
 }
 
 while [ $# -gt 0 ]; do
@@ -70,6 +108,10 @@ if [ "$MODE" = "auto" ]; then
   fi
 fi
 
+# prerequisites first — fail fast in both modes (in --release mode: before any
+# download; the shipped agent-scripts/ need python3 + git at install time)
+check_prereqs
+
 if command -v shasum >/dev/null 2>&1; then
   SHA_CHECK="shasum -a 256 -c"     # macOS
 elif command -v sha256sum >/dev/null 2>&1; then
@@ -80,12 +122,21 @@ else
 fi
 
 # install_payload <payload-root> <version>
-# payload-root = directory containing agents/ commands/ skills/ (plugins/ optional)
+# payload-root = directory containing agents/ commands/ skills/ (plugins/ and
+# agent-scripts/ optional — old tarballs predate them)
 install_payload() {
   payload="$1"
   version="$2"
-  for d in agents commands skills; do
-    if [ ! -d "$payload/$d" ]; then
+  want_scripts=0
+  for d in agents commands skills agent-scripts; do
+    if [ -d "$payload/$d" ]; then
+      if [ "$d" = "agent-scripts" ]; then
+        want_scripts=1
+      fi
+    elif [ "$d" = "agent-scripts" ]; then
+      # old release tarballs predate agent-scripts/ — skip with a note, don't fail
+      echo "install.sh: payload has no agent-scripts/ — skipping (old release predates it)"
+    else
       echo "install.sh: payload is missing $d/ (looked in $payload)" >&2
       exit 1
     fi
@@ -107,6 +158,9 @@ install_payload() {
   old_manifest="$DEST/opencode-agents.manifest"
 
   dirs="agents commands skills"
+  if [ "$want_scripts" = "1" ]; then
+    dirs="$dirs agent-scripts"
+  fi
   if [ "$want_plugins" = "1" ]; then
     dirs="$dirs plugins"
   fi
@@ -118,7 +172,7 @@ install_payload() {
   if [ -f "$old_manifest" ]; then
     while IFS= read -r f; do
       case "$f" in
-        agents/*|commands/*|skills/*|plugins/*) ;;
+        agents/*|commands/*|skills/*|agent-scripts/*|plugins/*) ;;
         *) continue ;;
       esac
       if ! grep -qxF "$f" "$new_list"; then
@@ -133,6 +187,12 @@ install_payload() {
     # -L dereferences symlinks (plan-thorough.md placeholder) into real installed files
     cp -RL "$payload/$d/." "$DEST/$d/"
   done
+  if [ "$want_scripts" = "1" ]; then
+    mkdir -p "$DEST/agent-scripts"
+    cp -RL "$payload/agent-scripts/." "$DEST/agent-scripts/"
+    # defensive: the exec bit should survive cp, but make sure the scripts run
+    find "$DEST/agent-scripts" -type f \( -name '*.sh' -o -name '*.py' \) -exec chmod +x {} +
+  fi
   if [ "$want_plugins" = "1" ]; then
     mkdir -p "$DEST/plugins"
     cp -RL "$payload/plugins/." "$DEST/plugins/"
@@ -141,14 +201,17 @@ install_payload() {
   mv "$new_list" "$old_manifest"
   printf '%s\n' "$version" > "$DEST/opencode-agents.version"
   echo "installed opencode-agents $version -> $DEST"
+  if [ "$want_scripts" = "1" ]; then
+    echo "agent-scripts -> $DEST/agent-scripts (detect-forge.sh, driver-state.py — called by the driver agents)"
+  fi
   if [ "$want_plugins" = "1" ]; then
     echo "driver-viz TUI plugin -> $DEST/plugins/driver-viz (auto-discovered; /driver-viz cycles runs)"
   fi
 }
 
 source_mode() {
-  if [ ! -d "$SCRIPT_DIR/agents" ] || [ ! -d "$SCRIPT_DIR/commands" ] || [ ! -d "$SCRIPT_DIR/skills" ]; then
-    echo "install.sh: --source but no agents/ commands/ skills/ next to $0" >&2
+  if [ ! -d "$SCRIPT_DIR/agents" ] || [ ! -d "$SCRIPT_DIR/commands" ] || [ ! -d "$SCRIPT_DIR/skills" ] || [ ! -d "$SCRIPT_DIR/agent-scripts" ]; then
+    echo "install.sh: --source but no agents/ commands/ skills/ agent-scripts/ next to $0" >&2
     exit 1
   fi
   version="unknown"
@@ -205,3 +268,5 @@ echo "  2. Add '.plan/' to the .gitignore of every repo you run the driver in (s
 echo "  3. Pick a model/variant with /models — all driver phases inherit the session model"
 echo "  4. The driver-viz sidebar plugin (installed under plugins/, unless --no-plugin) shows the"
 echo "     live phase flow chart of the current /driver run in the TUI sidebar"
+echo "  5. Driver helper scripts (detect-forge.sh, driver-state.py) are installed under"
+echo "     \${XDG_CONFIG_HOME:-~/.config}/opencode/agent-scripts/ — the driver agents call them from there"

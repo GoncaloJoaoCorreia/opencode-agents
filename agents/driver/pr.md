@@ -28,15 +28,25 @@ driver phase allowed to push — every other agent hard-denies `git push *`.
 
 1. Load the `driver-conventions` skill — PR/MR conventions, the forge-detection/cache
    contract, and the per-forge command table live in its §7.
-2. Read `state.json`: `spec` (title), `plan.tasks[]` (commit SHAs), `plan.risks`,
-   `audit`/`review`/`qa` verdicts, `phases` statuses, `params`, `remote`.
+2. Read `state.json` via the installed `driver-state.py` (driver-conventions §8 — define
+   `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`; if the scripts
+   are missing, stop with "agent-scripts not installed — re-run install.sh"):
+   `"$SCRIPTS/driver-state.py" get "$statePath" <dot.path>` for `spec` (title),
+   `plan.tasks[]` (commit SHAs), `plan.risks`, `audit`/`review`/`qa` verdicts, `phases`
+   statuses, `params`, `remote`.
 3. **Resolve the forge** (first match wins):
    - `state.remote.forge` when set and not `"unknown"` → use `state.remote.cli` too.
-   - Else `params.forge` when set and not `"auto"`.
-   - Else `git config --get driver.forge` (the repo-local cache preplan writes).
-   - Else derive from the origin URL host: `github.com` → `github`, `gitlab.com` →
-     `gitlab`, `codeberg.org` → `forgejo`, else `"unknown"`.
-   - Set `cli` per forge if not already known: `command -v gh` / `glab` /
+   - Else (e.g. resume with preplan skipped): call the installed script instead of
+     re-deriving inline — the semantics are driver-conventions §7.1, the mechanism is §8:
+     run `"$SCRIPTS/detect-forge.sh" --repo "$repoRoot"`, plus `--forge "$params.forge"`
+     when `params.forge` is concrete (the script's flag → `git config driver.forge` cache
+     → probe precedence covers the remaining cases). Capture the single JSON object on
+     stdout; on a non-zero exit, surface the script's stderr and exit code and stop — never
+     swallow them. Merge the result into `state.remote` via
+     `"$SCRIPTS/driver-state.py" merge "$statePath" <patch.json>`
+     (`printf '{"remote": %s}\n' "$json" > "$(dirname "$statePath")/remote.patch.json"` —
+     the script's stdout is pure single-line JSON), then use the returned `forge`/`cli`.
+   - Set `cli` per forge if still unknown: `command -v gh` / `glab` /
      `forgejo-cli` / `fj` (fj = forgejo-cli, whichever binary name exists).
    - Head branch = `state.branch` (fallback: `git branch --show-current`). Validate the
      slug against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path or shell use; quote everything.
@@ -103,7 +113,10 @@ driver phase allowed to push — every other agent hard-denies `git push *`.
        `fj pr create --base <base> --head <head> --title "<title>" --body-file .plan/<slug>/pr-body.md`
        · update: `fj pr edit <n> --title "<title>" --body-file .plan/<slug>/pr-body.md`
        · URL: `fj pr view <n> --json url -q .url`
-10. Merge into `state.json` (never clobber): `pr = { number, url, base, head, title, draft: params.draft === true, forge, cli }`,
+10. Merge into `state.json` (never clobber) via the installed `driver-state.py`
+    (driver-conventions §8): write the patch to a JSON file under `.plan/<slug>/` and run
+    `"$SCRIPTS/driver-state.py" merge "$statePath" <patch.json>` (or `set` per path):
+    `pr = { number, url, base, head, title, draft: params.draft === true, forge, cli }`,
     `phases.pr = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)

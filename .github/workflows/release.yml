@@ -123,7 +123,7 @@ jobs:
           stage_root=$(mktemp -d)
           mkdir -p "$stage_root/opencode-agents"
           # -L dereferences symlinked placeholder agents (plan-thorough.md)
-          cp -RL agents commands skills snippets plugins install.sh LICENSE "$stage_root/opencode-agents/"
+          cp -RL agents commands skills snippets plugins agent-scripts install.sh LICENSE "$stage_root/opencode-agents/"
           tar -czf opencode-agents.tar.gz -C "$stage_root" opencode-agents
           sha256sum opencode-agents.tar.gz > SHA256SUMS
           cat SHA256SUMS
@@ -158,9 +158,13 @@ jobs:
           diff -r "$t/opencode-agents/commands" commands
           diff -r "$t/opencode-agents/skills" skills
           diff -r "$t/opencode-agents/plugins" plugins
+          diff -r "$t/opencode-agents/agent-scripts" agent-scripts
           # full installer path: download payload, verify checksum, install into temp dir
+          # (ubuntu-latest has python3 + git preinstalled, so the prereq check passes)
           sh install.sh --release --dest "$t/cfg"
           test -f "$t/cfg/agents/driver.md"
           test -f "$t/cfg/plugins/driver-viz/tui.tsx"
+          test -f "$t/cfg/agent-scripts/detect-forge.sh"
+          test -f "$t/cfg/agent-scripts/driver-state.py"
           test -f "$t/cfg/opencode-agents.manifest"
           echo "self-test OK: release $tag verifies and installs"

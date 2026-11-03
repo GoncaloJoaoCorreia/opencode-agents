@@ -56,7 +56,10 @@ scoped to one task (`scope: "task"`, `taskId`).
 
 ## Output contract (to the driver)
 
-- Update `state.json` (merge, never clobber):
+- Update `state.json` via the installed `driver-state.py` (merge, never clobber —
+  `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"`, driver-conventions
+  §8; pass JSON entries as single-quoted arguments, e.g.
+  `"$SCRIPTS/driver-state.py" push "$statePath" implement.runs "$entryJson"`):
   - task mode: `plan.tasks[<id>] = { status: "done", commit: <sha> }` (the driver's gate
     sets the per-task `audit` / `qa` verdicts afterwards)
   - fix mode: append to the list named by `fix_target` —
