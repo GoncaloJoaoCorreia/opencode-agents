@@ -3,9 +3,10 @@
 Personal library of OpenCode v2 agents/commands/skills plus one TUI plugin. Ships the
 **driver** (`/driver`) — a multi-phase feature-cycle orchestrator — and **driver-viz**, a
 TUI-only plugin that renders the live phase flow chart of the current driver run in the
-sidebar. There is no build, test, lint, or CI here; this repo is pure config/markdown plus
-`install.sh` (plugin checks + tests live in `scripts/validate-driver-viz.sh`, separate
-from the agent-declaration validation in `scripts/validate.sh`).
+sidebar. There is no build or lint here; this repo is pure config/markdown plus
+`install.sh`. Tests + validation run in CI on every PR (`.github/workflows/test.yml`:
+`scripts/validate.sh` for agent declarations + `scripts/validate-driver-viz.sh` for the
+plugin, both including the agent-scripts unit suite).
 
 ## Install / verify
 

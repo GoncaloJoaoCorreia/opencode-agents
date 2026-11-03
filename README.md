@@ -1,5 +1,6 @@
 # opencode-agents
 
+[![test](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/test.yml/badge.svg)](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/test.yml)
 [![build](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/release.yml/badge.svg)](https://github.com/GoncaloJoaoCorreia/opencode-agents/actions/workflows/release.yml)
 [![release](https://img.shields.io/github/release/GoncaloJoaoCorreia/opencode-agents?display_name=tag)](https://github.com/GoncaloJoaoCorreia/opencode-agents/releases/latest)
 [![license](https://img.shields.io/badge/license-Unlicense-blue)](LICENSE)
