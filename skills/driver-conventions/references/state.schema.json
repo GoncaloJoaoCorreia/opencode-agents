@@ -41,6 +41,17 @@
       "properties": { "directory": { "type": "string" } },
       "description": "set when --worktree was used"
     },
+    "remote": {
+      "type": "object",
+      "description": "Filled by preplan: origin remote + detected forge. The forge is cached repo-locally in `git config driver.forge` (see SKILL.md §7.1); the pr phase picks its CLI from `forge`/`cli`.",
+      "properties": {
+        "url": { "type": "string", "description": "git remote get-url origin" },
+        "host": { "type": "string", "description": "host parsed from the https/ssh remote URL" },
+        "forge": { "enum": ["github", "gitlab", "forgejo", "unknown"] },
+        "cli": { "type": ["string", "null"], "enum": ["gh", "glab", "fj", null], "description": "fj = forgejo-cli, whichever binary name exists" },
+        "source": { "enum": ["flag", "cache", "probe"], "description": "flag = --forge flag (persisted to git config); cache = git config driver.forge; probe = detected this run" }
+      }
+    },
     "warnings": { "type": "array", "items": { "type": "string" } },
     "created_at": { "type": "string", "format": "date-time" },
     "params": {
@@ -65,7 +76,12 @@
           "description": "--qa-scope: per-task (scope=task) quality-gate runs the task's manifest qa.command (\"scoped\") or the full state.qa.command (\"full\"); the cycle-scope run always runs state.qa.command"
         },
         "force": { "type": "boolean", "description": "re-run requested phases even if done" },
-        "draft": { "type": "boolean", "description": "--draft: open the PR as a draft (pr phase)" },
+        "draft": { "type": "boolean", "description": "--draft: open the PR/MR as a draft (pr phase)" },
+        "forge": {
+          "enum": ["auto", "github", "gitlab", "forgejo"],
+          "default": "auto",
+          "description": "--forge: override forge detection for the pr phase; a concrete value is persisted to `git config driver.forge` by preplan. auto = detect from the origin remote (cached) — see SKILL.md §7.1"
+        },
         "variants": {
           "type": "object",
           "description": "phase -> variant name, e.g. { plan: \"thorough\" }; resolved via the driver's VARIANTS table",
@@ -298,7 +314,9 @@
         "base": { "type": "string", "description": "base branch (repo default, fallback main)" },
         "head": { "type": "string", "description": "head branch (the cycle branch)" },
         "title": { "type": "string" },
-        "draft": { "type": "boolean", "description": "true when opened via --draft" }
+        "draft": { "type": "boolean", "description": "true when opened via --draft" },
+        "forge": { "enum": ["github", "gitlab", "forgejo"], "description": "forge the PR/MR was opened on" },
+        "cli": { "type": ["string", "null"], "enum": ["gh", "glab", "fj", null], "description": "forge CLI used (fj = forgejo-cli)" }
       }
     }
   },

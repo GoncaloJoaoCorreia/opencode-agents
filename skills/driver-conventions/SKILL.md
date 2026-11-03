@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -18,17 +18,20 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Dirty tree at start → the driver asks (default: abort).
 - Branch: on `main`/`master`/`develop`/`dev` the driver creates `feat/<slug>`.
 - Final phase `pr` (phase 8, in the default phase list) pushes the cycle branch and
-  opens/updates a PR via the `gh` CLI against the repo's default branch (fallback `main`)
-  — see §7. It is the ONLY phase allowed to push.
+  opens/updates a PR/MR via the forge CLI (`gh` for GitHub, `glab` for GitLab,
+  `forgejo-cli` for Forgejo) against the repo's default branch (fallback `main`) —
+  see §7. It is the ONLY phase allowed to push.
 - `--worktree`: the driver creates a git worktree named `<slug>` and moves its session into
   it before spawning any phase.
 - Linear: MCP server `linear-project` (https://mcp.linear.app/mcp), READ-ONLY:
   `get_issue` / `list_comments` etc. may be called without prompting; all
   create/update/save/delete tools are hard-denied.
 - Flags: `--phases`, `--skip`, `--worktree`, `--max-rounds N`, `--qa "cmd"`,
-  `--qa-scope scoped|full`, `--force`, `--draft`, `--<phase>-variant <name>` — parsed by the
-  driver into `state.params`; on resume, newly passed flags win. `--force` re-runs all
-  requested phases even if `done`. `--draft` opens the PR as a draft (pr phase only).
+  `--qa-scope scoped|full`, `--force`, `--draft`, `--forge auto|github|gitlab|forgejo`,
+  `--<phase>-variant <name>` — parsed by the driver into `state.params`; on resume, newly
+  passed flags win. `--force` re-runs all requested phases even if `done`. `--draft` opens
+  the PR/MR as a draft (pr phase only). `--forge` overrides forge detection for the pr
+  phase; a concrete value is persisted to `git config driver.forge` (§7.1).
   `--qa-scope` sets `params.qa_scope` (default `"scoped"`). `--skip a,b,...` stores
   `params.skip[]` and marks those phases `status: "skipped"` — they are never spawned,
   including their per-task gate spawns inside the implement fan-out (`--skip spec-audit` /
@@ -58,6 +61,9 @@ Schema: `references/state.schema.json`. Key rules:
   `skipped` is set by `--skip` (`params.skip[]`) or by preplan's "skip quality-gate" choice.
   This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
   `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }`.
+- `remote = { url, host, forge: github|gitlab|forgejo|unknown, cli: gh|glab|fj|null, source: flag|cache|probe }`
+  — filled by preplan (origin remote + detected forge); the pr phase uses it to pick the
+  forge CLI. The forge is cached repo-locally in `git config driver.forge` (§7.1).
 - `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit, audit?, qa? }` —
   `audit`/`qa` are the per-task gate verdicts (pass|fail|skipped), set by the
   per-task gate (always on).
@@ -183,25 +189,66 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
 - The `question` tool works in foreground children; the driver is interactive-only
   (headless `opencode run` is not supported).
 
-## 7. Pull requests (pr phase)
+## 7. Forge detection & pull requests (pr phase)
+
+### 7.1 Forge detection + cache (preplan fills `state.remote`)
+
+- `state.remote = { url, host, forge, cli, source }` — `url` = `git remote get-url origin`,
+  `host` parsed from the https/ssh remote URL, `forge` = `github|gitlab|forgejo|unknown`,
+  `cli` = `gh|glab|fj|null` (`fj` = forgejo-cli, whichever binary name exists),
+  `source` = `flag|cache|probe`.
+- Precedence in preplan (first match wins): `--forge <concrete>` (`params.forge`,
+  `source: "flag"`, persisted via `git config driver.forge <forge>`) → cached
+  `git config --get driver.forge` (`source: "cache"`, no probing, no CLI auth needed) →
+  probe (`source: "probe"`).
+- Probe: known SaaS hosts map directly (`github.com` → github, `gitlab.com` → gitlab,
+  `codeberg.org` → forgejo). Custom hosts are probed in order glab → forgejo-cli → gh:
+  `<cli> auth status` && `<cli> api user`; the first CLI that is installed, authenticated
+  and answers identifies the forge (a probe against the wrong forge fails fast). Success
+  is persisted to `git config driver.forge`; failure is NOT cached (`forge: "unknown"` +
+  warning), so authenticating the right CLI later fixes the next run without `--forge`.
+  `--forge auto` = ignore the cache, re-probe, overwrite it.
+- The cache lives in repo-local git config: never committed, shared across linked
+  worktrees by default (unless the repo sets `extensions.worktreeConfig` — then `--forge`
+  is the reliable override). Manual override/clear: `git config driver.forge <forge>` /
+  `git config --unset driver.forge`.
+- The pr phase re-derives the forge when `state.remote` is missing (resume with preplan
+  skipped): `state.remote.forge` → `params.forge` → `git config driver.forge` → host map.
+
+### 7.2 PR/MR conventions (pr phase)
 
 - `driver/pr` (phase 8, default) is the ONLY agent allowed `git push`: it runs
-  `git push -u origin <branch>` (never `--force`) and then opens or updates the PR with
-  the `gh` CLI. If a PR for the head branch already exists, `gh pr edit` it (idempotent
-  resume) — never create a duplicate. With `--draft` (`params.draft: true`) the PR is
-  created via `gh pr create --draft` and `state.pr.draft` is set to true.
-- Base branch: repo default via `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`,
-  fallback `main`. Head = `state.branch`.
+  `git push -u origin <branch>` (never `--force`) and then opens or updates the PR/MR with
+  the forge CLI. If one for the head branch already exists, EDIT it (idempotent resume) —
+  never create a duplicate. With `--draft` (`params.draft: true`) it is created with the
+  CLI's `--draft` flag and `state.pr.draft` is set to true.
+- Base branch: github via `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`;
+  gitlab/forgejo via `git symbolic-ref --short refs/remotes/origin/HEAD` (strip `origin/`).
+  Fallback `main`. Head = `state.branch`.
 - Title: conventional-commit style, capped at 72 chars. Reuse the first task-commit
   subject if it already matches `<type>(<scope>): ...`; otherwise synthesize from the
   dominant commit type/scope + `state.spec.title` (fallback: the slug). Sanitize/validate
   before any shell use — never interpolate unvalidated text into a shell command.
-- Body: follow the target repo's PR template when one exists (`.github/PULL_REQUEST_TEMPLATE.md`,
-  `.github/PULL_REQUEST_TEMPLATE/*.md`, `docs/PULL_REQUEST_TEMPLATE.md`, root
-  `PULL_REQUEST_TEMPLATE.md`); keep it SHORT and review-focused — Summary, How to review
+- Body: follow the target repo's PR/MR template when one exists — github:
+  `.github/PULL_REQUEST_TEMPLATE.md`, `.github/PULL_REQUEST_TEMPLATE/*.md`,
+  `docs/PULL_REQUEST_TEMPLATE.md`, root `PULL_REQUEST_TEMPLATE.md`; gitlab:
+  `.gitlab/merge_request_templates/*.md`, root `MERGE_REQUEST_TEMPLATE.md`; forgejo:
+  `.gitea/merge_request_templates/*.md` or `.forgejo/merge_request_templates/*.md`, root
+  `MERGE_REQUEST_TEMPLATE.md`. Keep it SHORT and review-focused — Summary, How to review
   (riskiest files/commits first), How to verify (`state.qa.command` + audit/review
   verdicts), Risks & assumptions (from `plan.md`). Write it to `.plan/<slug>/pr-body.md`
-  and pass via `--body-file`.
-- Non-GitHub remote or unauthenticated `gh` → mark the phase `skipped`/`failed` with a
-  clear summary; never push anywhere else.
-- Record `state.pr = { number, url, base, head, title }` in `state.json`.
+  and pass via the CLI's body-file flag (`--body-file` for gh/forgejo-cli,
+  `--description-file` for glab).
+- Command table (titles/bodies sanitized and passed via flags, never inlined):
+
+  | | github (`gh`) | gitlab (`glab`) | forgejo (`forgejo-cli` / `fj`) |
+  |---|---|---|---|
+  | auth check | `gh auth status` | `glab auth status` | `fj auth status` |
+  | list open by head | `gh pr list --head <head> --state open --json number -q '.[0].number'` | `glab mr list --source-branch <head> --state opened --json iid -q '.[0].iid'` | `fj pr list --head <head> --state open --json number -q '.[0].number'` |
+  | create | `gh pr create --base <base> --head <head> --title <t> --body-file <f> [--draft]` | `glab mr create --yes --target-branch <base> --source-branch <head> --title <t> --description-file <f> [--draft]` | `fj pr create --base <base> --head <head> --title <t> --body-file <f> [--draft]` |
+  | update | `gh pr edit <n> --title <t> --body-file <f>` | `glab mr edit <iid> --title <t> --description-file <f>` | `fj pr edit <n> --title <t> --body-file <f>` |
+  | url | `gh pr view <n> --json url -q .url` | `glab mr view <iid> --output json -q .web_url` | `fj pr view <n> --json url -q .url` |
+
+- Unknown forge, or the forge's CLI missing/unauthenticated → mark the phase
+  `skipped`/`failed` with a clear summary; never push anywhere else.
+- Record `state.pr = { number, url, base, head, title, draft, forge, cli }` in `state.json`.

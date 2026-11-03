@@ -30,8 +30,8 @@ curl -fsSL https://raw.githubusercontent.com/GoncaloJoaoCorreia/opencode-agents/
 ```
 
 > [!TIP]
-> The final `pr` phase needs an authenticated `gh` CLI (`gh auth login`) to push the branch
-> and open the PR for you — see step 4 below.
+> The final `pr` phase needs an authenticated forge CLI to push the branch and open the
+> PR/MR for you — `gh` for GitHub, `glab` for GitLab, `forgejo-cli` for Forgejo — see step 4 below.
 
 The installer downloads the latest GitHub release payload (`opencode-agents.tar.gz`),
 verifies it against the release's `SHA256SUMS`, and installs `agents/`, `commands/`,
@@ -70,9 +70,13 @@ Before your first run, in the repo you want to work on:
 
 2. Add `.plan/` to that repo's `.gitignore` (ready-made line in `snippets/gitignore.txt`).
 3. Pick a model (and variant) with `/models` — all driver phases inherit your session model.
-4. Authenticate the `gh` CLI (`gh auth login`) — the `pr` phase needs it to push the branch
-   and open/update the PR on a GitHub remote. Without it (or on a non-GitHub remote) that
-   phase skips with a note and you push/open the PR yourself.
+4. Authenticate the forge CLI for your remote — `gh auth login` (GitHub), `glab auth login`
+   (GitLab), or `forgejo-cli auth login` (Forgejo). The `pr` phase needs it to push the
+   branch and open/update the PR/MR. On the first run the driver detects the forge from the
+   origin remote (probing the CLIs on self-hosted instances) and caches it repo-locally in
+   `git config driver.forge`, so later runs skip detection — override anytime with
+   `--forge github|gitlab|forgejo`. Without a recognized forge or an authenticated CLI,
+   the `pr` phase skips with a note and you push/open the PR/MR yourself.
 
 Then, from the repo root:
 
@@ -110,7 +114,7 @@ flowchart TD
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
 | write-history | `/phases/write-history` | Appends `agent/<module>/history.md` + `decisions.md` and commits them |
-| pr | `/phases/pr` | Pushes the branch and opens/updates a PR against the repo's default branch (`gh`), with a short, review-focused description that follows the repo's PR template when one exists |
+| pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
 Per-task gating: right after each task's commit
 the driver runs spec-audit (`scope=task`) and quality-gate (`scope=task`) for that task,
@@ -171,7 +175,8 @@ disable the animation, register the plugin with options in `cli.json`:
 /driver ABC-123 --worktree                       # whole cycle inside a new git worktree named ABC-123
 /driver ABC-123 --max-rounds 3 --qa "npm test"   # cap repair rounds, pin the QA command
 /driver ABC-123 --force                          # re-run the requested phases even if already done
-/driver ABC-123 --draft                          # open the PR as a draft
+/driver ABC-123 --draft                          # open the PR/MR as a draft
+/driver ABC-123 --forge gitlab                   # force the forge (auto-detected + cached otherwise)
 /driver ABC-123 --plan-variant thorough          # use a variant implementation of a phase
 /driver ABC-123 --qa-scope full                  # run the full QA command after every task too
 /phases/spec-audit ABC-123                       # run a single phase standalone
@@ -186,7 +191,8 @@ disable the animation, register the plugin with options in `cli.json`:
 | `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |
 | `--qa-scope scoped\|full` | Per-task quality-gate source: the task's scoped `qa.command` (default) or the full QA command; the cycle-scope run always uses the full command |
 | `--force` | Re-run the requested phases even if marked done |
-| `--draft` | Open the PR as a draft (`pr` phase) |
+| `--draft` | Open the PR/MR as a draft (`pr` phase) |
+| `--forge auto\|github\|gitlab\|forgejo` | Forge used by the `pr` phase (default `auto`: detect from the origin remote, cached in `git config driver.forge`; a concrete value is persisted to that cache) |
 | `--<phase>-variant <name>` | Swap in a variant implementation of a phase |
 
 ## What lands in your repo
@@ -208,8 +214,11 @@ final `pr` phase, which pushes the branch and opens the PR.
   QA command, retries), so headless `opencode run` is not supported.
 - **Linear is used read-only** (`get_issue`, `list_comments`, …); the driver never comments
   on or updates issues.
-- **The `pr` phase needs the `gh` CLI authenticated** (`gh auth login`) and a GitHub
-  remote; on a non-GitHub remote it skips with a note and you push/open the PR yourself.
+- **The `pr` phase needs the forge CLI authenticated and the remote recognized** —
+  `gh auth login` for GitHub, `glab auth login` for GitLab, `forgejo-cli auth login` for
+  Forgejo. The forge is auto-detected from the origin remote and cached in
+  `git config driver.forge` (`--forge` overrides); on an unrecognized remote or missing
+  CLI the phase skips with a note and you push/open the PR/MR yourself.
 - **Permissions are permissive by default**: shell commands run without allow/deny
   prompts in all driver agents. Safety comes from the hard `deny` rules (no `git push`
   outside `driver/pr`, no subagent spawning, edit scoped per phase, Linear writes denied).

@@ -41,7 +41,7 @@ The `/driver` command template supplies the raw arguments plus repo root, branch
 dirty-file list. Grammar:
 
 ```
-/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--skip a,b,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--<phase>-variant <name>]
+/driver <ISSUE-KEY-OR-SPEC> [--phases preplan,plan,...] [--skip a,b,...] [--worktree] [--max-rounds N] [--qa "cmd"] [--qa-scope scoped|full] [--force] [--draft] [--forge auto|github|gitlab|forgejo] [--<phase>-variant <name>]
 ```
 
 - First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]*-[0-9]+$`) or a raw
@@ -66,8 +66,13 @@ dirty-file list. Grammar:
   runs the task's manifest `qa.command` ("scoped"; skipped when the task declares none) or
   the full `state.qa.command` ("full"). The cycle-scope run ALWAYS uses `state.qa.command`.
 - `--force`: re-run the requested phases even if already `done` (bare flag = all requested).
-- `--draft`: open the PR as a draft — stored as `params.draft`; the pr phase maps it to
-  `gh pr create --draft`.
+- `--draft`: open the PR/MR as a draft — stored as `params.draft`; the pr phase maps it to
+  the forge CLI's draft flag (`gh pr create --draft`, `glab mr create --draft`,
+  `forgejo-cli pr create --draft`).
+- `--forge auto|github|gitlab|forgejo`: override forge detection for the pr phase
+  (default `auto` = detect from the origin remote; preplan caches the result repo-locally
+  in `git config driver.forge` so later runs don't re-probe — see driver-conventions §7).
+  A concrete value is persisted to that cache. Stored as `params.forge`.
 - `--<phase>-variant <name>`: e.g. `--plan-variant thorough` → `params.variants.plan` →
   VARIANTS table lookup below.
 - Unknown flag or missing positional → stop and report; do not guess.
@@ -112,7 +117,7 @@ Record `state.worktree = { directory }`.
 ## 5. Write initial state.json
 
 Create `.plan/<slug>/state.json` per the `driver-conventions` schema:
-`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, skip, worktree, qa_scope }, phases: { <each>: { status: "pending" } } }`.
+`{ version: 1, issue_id: slug, repo_root, plan_dir: ".plan/<slug>", branch, worktree, created_at, params: { phases, skip, worktree, qa_scope, forge }, phases: { <each>: { status: "pending" } } }`.
 If it exists, merge — never clobber.
 
 ## 6. Spawn phases (registry order)
@@ -126,7 +131,7 @@ If it exists, merge — never clobber.
 | 5 | code-review   | `driver/code-review`   | cycle-scope only; same round-loop pattern                   |
 | 6 | quality-gate  | `driver/quality-gate`  | like spec-audit; cycle scope always runs the full state.qa.command; YOU run bounded repair rounds per gate |
 | 7 | write-history | `driver/write-history` | appends agent/<module>/*.md AND commits them (docs commit)  |
-| 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR vs the default branch (gh) |
+| 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR/MR vs the default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`) |
 
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
 `description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,

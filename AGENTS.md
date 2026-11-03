@@ -111,6 +111,12 @@ update the schemas too**, and keep README.md's summary in sync.
 - **New variant of a phase**: row in the VARIANTS table in `agents/driver.md`; replace the
   `plan-thorough.md` symlink with a real agent file (same output contract) when needed.
 - **New `/driver` flag**: parse it in section 1 of `agents/driver.md`, store in `state.params`.
+- **New forge support** (pr phase): extend the detection + cache contract and the per-forge
+  command table in `skills/driver-conventions/SKILL.md` §7, the dispatch in
+  `agents/driver/pr.md`, the detection step in `agents/driver/preplan.md`, and
+  `state.remote` / `params.forge` / `state.pr.forge` in
+  `skills/driver-conventions/references/state.schema.json`. The detected forge is cached
+  repo-locally in `git config driver.forge` (never committed).
 
 ## Gotchas (hard-earned — do not rediscover)
 

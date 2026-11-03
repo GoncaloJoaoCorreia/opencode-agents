@@ -1,5 +1,5 @@
 ---
-description: Driver phase 1 — collect the spec (Linear issue via the linear-project MCP server, or pasted/file spec), detect+confirm the QA command, check .plan/ is gitignored, and fill in .plan/<SLUG>/state.json
+description: Driver phase 1 — collect the spec (Linear issue via the linear-project MCP server, or pasted/file spec), detect+confirm the QA command, detect and cache the git forge (github/gitlab/forgejo via gh/glab/forgejo-cli), check .plan/ is gitignored, and fill in .plan/<SLUG>/state.json
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -38,7 +38,7 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
 
 - `statePath` — absolute path to `.plan/<slug>/state.json`
 - `slug`, `issueOrSpec` (Linear key or raw spec), `repoRoot`, `branch`
-- `params` — { phases: [...] | undefined, skip: [...] | undefined, worktree: bool }
+- `params` — { phases: [...] | undefined, skip: [...] | undefined, worktree: bool, forge: "auto"|"github"|"gitlab"|"forgejo" | undefined }
 
 ## Steps
 
@@ -66,21 +66,54 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
    - Else if `state.qa.command` already exists (resume) and `params.force` is NOT set: keep the
      stored command — skip detection and the question. Only re-ask when forced or when missing.
    - Else detect candidates read-only: `package.json` scripts (`test`, `check`, `lint`,
-     `typecheck`), `Makefile` (`test`/`check` targets), `.github/workflows/*.yml` test steps.
+     `typecheck`), `Makefile` (`test`/`check` targets), CI test steps in
+     `.github/workflows/*.yml`, `.gitlab-ci.yml`, `.forgejo/workflows/*.yml` and
+     `.gitea/workflows/*.yml`.
    - Ask via `question` to confirm: options = detected candidates + "skip quality-gate" + free-form.
      Store the choice in `state.qa.command` (and `state.qa.candidates`). Choosing
      "skip quality-gate" also sets `phases["quality-gate"].status = "skipped"` immediately,
      so the driver does not have to infer it.
-4. **`.gitignore` check:** read the repo-root `.gitignore`. If it has no `.plan/` entry, append
+4. **Forge detection + cache** (fills `state.remote`; the pr phase consumes it — see
+   driver-conventions §7 for the full contract). Precedence, first match wins:
+   - `params.forge` is a concrete forge (`github`/`gitlab`/`forgejo`, i.e. the `--forge`
+     flag was passed and is not `auto`) → use it with `source: "flag"`, and PERSIST it:
+     `git config driver.forge <forge>` (repo-local config — never committed, shared
+     across linked worktrees by default, so the forge is detected once per clone).
+   - Else `git config --get driver.forge` returns a known forge → use it with
+     `source: "cache"`. No probing, no CLI auth needed.
+   - Else probe (only reached when `--forge auto` or no cache):
+     - `url=$(git remote get-url origin)`; parse the host from https
+       (`https://host/owner/repo[.git]`, also `https://user@host/...`) and ssh forms
+       (`git@host:owner/repo.git`, `ssh://git@host/...`).
+     - Known SaaS hosts map directly: `github.com` → `github`, `gitlab.com` → `gitlab`,
+       `codeberg.org` → `forgejo`.
+     - Custom host: probe the installed CLIs in order glab → forgejo-cli → gh; the first
+       one that is installed, authenticated, AND answers its user API identifies the
+       forge (a probe against the wrong forge fails fast):
+       - glab: `glab auth status` && `glab api user`
+       - forgejo-cli (binary `forgejo-cli` or `fj`): `<bin> auth status` && `<bin> api user`
+       - gh: `gh auth status` && `gh api user`
+     - On success: `git config driver.forge <forge>` and `source: "probe"`.
+     - On failure: `forge: "unknown"`, `source: "probe"`, plus a warning
+       ("could not identify the forge of <host> — pass --forge, or authenticate the
+       matching CLI; the pr phase will skip"). Do NOT cache the failure, so a later
+       `glab auth login` etc. fixes it on the next run without `--forge`.
+   - CLI for the winning forge: `command -v gh` / `command -v glab` /
+     `command -v forgejo-cli` / `command -v fj` → `cli: "gh" | "glab" | "fj" | null`
+     (`fj` = forgejo-cli, whichever binary name exists).
+   - Record `state.remote = { url, host, forge, cli, source }`. `git config` is a shell
+     call, not a file edit — you may still NOT edit files outside `.plan/**`.
+5. **`.gitignore` check:** read the repo-root `.gitignore`. If it has no `.plan/` entry, append
    `".plan/ is not gitignored in this repo — add it (see the driver's snippets/gitignore.txt)"`
    to `state.warnings` — but ONLY if that exact string is not already present (dedupe on re-runs).
    You may NOT edit files outside `.plan/**`.
-5. Merge everything into `state.json` (never clobber existing fields):
-   `spec`, `qa`, `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`.
+6. Merge everything into `state.json` (never clobber existing fields):
+   `spec`, `qa`, `remote`, `warnings`, and `phases.preplan = { status: "done", summary, completed_at }`.
 
 ## Output contract (to the driver)
 
-Return a SHORT summary only: slug, spec source, qa command (or "skipped"), warnings.
+Return a SHORT summary only: slug, spec source, qa command (or "skipped"), detected forge
++ cli + source (flag/cache/probe), warnings.
 Do NOT paste the spec or issue body into your reply.
 
 ## Gotchas
