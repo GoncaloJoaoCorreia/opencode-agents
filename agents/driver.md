@@ -151,7 +151,7 @@ If it exists, `merge` a patch — never clobber.
 | 4 | spec-audit    | `driver/spec-audit`    | report-only; spawned per task (scope=task) in the fan-out AND once at cycle scope (scope=cycle); YOU run bounded repair rounds per gate |
 | 5 | code-review   | `driver/code-review`   | cycle-scope only; same round-loop pattern                   |
 | 6 | quality-gate  | `driver/quality-gate`  | like spec-audit; cycle scope always runs the full state.qa.command; YOU run bounded repair rounds per gate |
-| 7 | write-history | `driver/write-history` | appends `<module>/.agent/*.md` (repo-root `.agent/` for root-level files) AND commits them (docs commit) |
+| 7 | write-history | `driver/write-history` | appends `<module>/.agent/*.md` (repo-root `.agent/` for root-level files) AND commits them (docs commit) — records only what is worth future reference; nothing is appended when nothing meaningful happened |
 | 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR/MR vs the default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`) |
 
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,

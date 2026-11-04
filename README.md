@@ -131,7 +131,7 @@ flowchart TD
 | spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
-| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them |
+| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them — only what is worth future reference; nothing is appended when nothing meaningful happened |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
 Per-task gating: right after each task's commit
@@ -240,6 +240,8 @@ disable the animation, register the plugin with options in `cli.json`:
 final `pr` phase, which pushes the branch and opens the PR.
 - **`<module>/.agent/history.md` and `decisions.md`** — committed by the final phase as a
   `docs(driver): ...` commit; repo-root-level changes land in the repo-root `.agent/`.
+  Only entries worth future reference are recorded — nothing is appended when nothing
+  meaningful happened.
   Module dirs are detected by the shipped `agent-scripts/detect-modules.py` (build
   system first, in order Gradle → Maven → npm-family → Cargo; fallback: top-level
   dirs, plus `src/*` when a root `src/` exists), and each changed file maps to the

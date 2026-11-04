@@ -181,6 +181,10 @@ Refs: <ISSUE-ID>
   - Consequences: ...
   ```
 
+- Restraint: rationales belong in `decisions.md` — never in `history.md`, and history
+  entries avoid implementation details unless they matter for the history itself.
+  Append nothing when nothing is worth recording this cycle — appending nothing is a
+  valid outcome, for `history.md` and `decisions.md` alike.
 - Repo-root-level changes (commits whose changed files are all at the repo root) go to
   the repo-root `.agent/history.md` / `.agent/decisions.md`.
 - Module mapping (G-22): run the INSTALLED `agent-scripts/detect-modules.py` (§8) —

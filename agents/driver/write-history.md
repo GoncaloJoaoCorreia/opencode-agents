@@ -1,5 +1,5 @@
 ---
-description: Driver phase 7 — append boundary history and decisions to each module's .agent/{history,decisions}.md in the target repo (repo-root .agent/ for root-level files), then commit those changes as a docs commit. The only agent allowed to edit .agent/**.
+description: Driver phase 7 — append boundary history and decisions to each module's .agent/{history,decisions}.md in the target repo (repo-root .agent/ for root-level files), then commit those changes as a docs commit. Records only what is worth future reference (boundary history + important decisions). The only agent allowed to edit .agent/**.
 mode: subagent
 # NOTE: no `model:` on purpose — inherits the session's model/variant.
 permissions:
@@ -52,6 +52,11 @@ Module dirs come from the INSTALLED agent script
    Append to `<module-dir>/.agent/decisions.md` ONLY for real decisions (from plan risks
    and audit/review notes): Context / Options / Decision / Rationale / Consequences.
    Create dirs/files if missing. One history entry per module per cycle (group the commits).
+   **Restraint** — history/decisions only ever hold what is worth future reference:
+   - Rationales belong in `decisions.md` — never in `history.md`.
+   - History entries avoid `implementation details` unless they matter for the
+     history itself.
+   - Append nothing when nothing is worth recording this cycle.
 4. Commit the history changes: `git add` ONLY the touched `.agent/...` paths, then
    `git commit -m "docs(driver): record history/decisions for <ISSUE-ID>"`.
    NEVER push (only the pr phase pushes). Never stage anything outside `.agent/`.
