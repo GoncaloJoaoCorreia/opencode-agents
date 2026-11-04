@@ -18,3 +18,10 @@
 - Decision: (b) — additive only; the schema allows additional properties and `qa.source` was declared explicitly, no fields removed.
 - Rationale: state.json is the exchange format between phases; recording the source once per run makes preplan/quality-gate summaries and debugging unambiguous without shelling out to git config.
 - Consequences: older state files without `qa.source` remain valid; when cache and `state.qa.command` disagree on resume the cache wins and overwrites state, and a state-only resume backfills the cache.
+
+## 2026-11-04 — G-30 — Single-task manifests reuse the "skipped" verdict and skip per-task gates only when the cycle gates run
+- Context: with a one-task manifest the per-task spec-audit + quality-gate duplicated the cycle-scope runs of the same phases; the fan-out had to decide when skipping is safe and how to record it without breaking resume or driver-viz.
+- Options considered: (a) keep per-task gates always on (status quo; pure duplication for single-task runs); (b) skip the per-task gate iff the manifest has exactly one task AND both cycle-scope spec-audit and quality-gate are in the effective run set (params.phases, default all 8, minus params.skip, not already skipped in state), recording audit/qa as "skipped" without spawning; (c) introduce a new verdict value for the skip.
+- Decision: (b) — verdicts reuse the existing "skipped" value (same as --skip): no audit.rounds[]/qa.runs[] task-scope entries, the task is marked done on commit; restricted runs (--phases/--skip) keep the per-task gate; applies in both qa_scope modes.
+- Rationale: no coverage is lost (cycle spec-audit re-verifies task-scope criteria, cycle quality-gate always runs the full state.qa.command); reusing "skipped" needs no state.schema type change and driver-viz already renders it as done; deriving the decision from the immutable manifest makes resume behave identically.
+- Consequences: driver-viz unchanged; known minor doc inconsistency (review R1-F1, warning only, pre-existing for --skip): the SKILL.md done-rule sentence still requires audit "pass" while the skip sets "skipped" — agents/driver.md carries the correct rule.

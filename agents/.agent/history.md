@@ -17,3 +17,8 @@
 - What changed: `agents/driver/write-history.md` now records only what is worth future reference in history.md (rationales belong in decisions.md only; appending nothing is valid) and runs the installed `agent-context-check.py`, pushing one `state.warnings` entry per over-limit `.agent` file (never fatal); `agents/driver.md` registry row mirrors both.
 - Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
 - Plan: `.plan/G-31/plan.md`
+
+## 2026-11-04 — G-30 — Subtask audit and QA steps - conditional skip
+- What changed: `agents/driver.md` step-6 fan-out now skips the per-task spec-audit/quality-gate for a single-task manifest when both cycle-scope gates are in the effective run set — records audit/qa "skipped" without spawning and marks the task done on commit; otherwise the per-task gate runs as before. Per-task-gate wording synced in `agents/driver/implement.md`, `agents/driver/plan.md`, `agents/driver/spec-audit.md`, `agents/driver/quality-gate.md`. driver-viz unchanged (already renders "skipped" as done).
+- Commits: `2461233175a0735a0094e0d41f8e7a5ef81fce7b`
+- Plan: `.plan/G-30/plan.md`
