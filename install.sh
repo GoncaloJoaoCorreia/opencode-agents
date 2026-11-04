@@ -40,6 +40,9 @@ API_LATEST="https://api.github.com/repos/${REPO}/releases/latest"
 MODE="auto"
 DEST="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
 INSTALL_PLUGIN=1
+# filled by install_payload, consumed by the success tail block below
+INSTALLED_VERSION=""
+INSTALLED_COMPONENTS=""
 
 usage() {
   cat <<EOF
@@ -82,6 +85,15 @@ check_prereqs() {
   if ! command -v gh >/dev/null 2>&1 && ! command -v glab >/dev/null 2>&1 \
      && ! command -v forgejo-cli >/dev/null 2>&1 && ! command -v fj >/dev/null 2>&1; then
     echo "install.sh: note: no forge CLI (gh/glab/forgejo-cli) found — optional; the driver's pr phase will skip pushing/opening the PR without one" >&2
+  fi
+  # optional: the driver reads Linear issues through the linear-project MCP server —
+  # warn (never fail) when it is not configured at user level; a repo-level
+  # opencode.jsonc also works at runtime
+  user_cfg="${XDG_CONFIG_HOME:-$HOME/.config}/opencode"
+  if ! grep -qs 'linear-project\|mcp\.linear\.app' "$user_cfg/opencode.json" "$user_cfg/opencode.jsonc" 2>/dev/null; then
+    echo "install.sh: warning: no Linear MCP server (linear-project) in your user-level OpenCode config ($user_cfg/opencode.json / opencode.jsonc)" >&2
+    echo "  the driver needs it to read Linear issues — add it to your user-level or repo-level opencode config:" >&2
+    echo '  { "mcp": { "linear-project": { "type": "remote", "url": "https://mcp.linear.app/mcp", "enabled": true } } }' >&2
   fi
   if ! command -v shellcheck >/dev/null 2>&1; then
     echo "install.sh: note: shellcheck not found — optional (skipped in scripts/validate.sh)" >&2
@@ -176,6 +188,7 @@ install_payload() {
 
   # manifest-based clean: remove previously installed files that no longer exist upstream
   if [ -f "$old_manifest" ]; then
+    stale_n=0
     while IFS= read -r f; do
       case "$f" in
         agents/*|commands/*|skills/*|agent-scripts/*|plugins/*) ;;
@@ -183,9 +196,12 @@ install_payload() {
       esac
       if ! grep -qxF "$f" "$new_list"; then
         rm -f "$DEST/$f"
-        echo "removed stale $f"
+        stale_n=$((stale_n + 1))
       fi
     done < "$old_manifest"
+    if [ "$stale_n" -gt 0 ]; then
+      echo "removed $stale_n stale file(s) from a previous install"
+    fi
   fi
 
   for d in agents commands skills; do
@@ -215,13 +231,16 @@ install_payload() {
 
   mv "$new_list" "$old_manifest"
   printf '%s\n' "$version" > "$DEST/opencode-agents.version"
-  echo "installed opencode-agents $version -> $DEST"
+  # record what was installed (not where) for the success tail block
+  INSTALLED_VERSION="$version"
+  components="agents/ commands/ skills/"
   if [ "$want_scripts" = "1" ]; then
-    echo "agent-scripts -> $DEST/agent-scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh — called by the driver agents)"
+    components="$components agent-scripts/"
   fi
   if [ "$want_plugins" = "1" ]; then
-    echo "driver-viz TUI plugin -> $DEST/plugins/driver-viz (auto-discovered; /driver-viz cycles runs)"
+    components="$components driver-viz plugin"
   fi
+  INSTALLED_COMPONENTS="$components"
 }
 
 source_mode() {
@@ -248,11 +267,11 @@ release_mode() {
     echo "  (no release published yet, or a network problem) — see https://github.com/$REPO/releases" >&2
     exit 1
   fi
-  echo "downloaded latest release payload from $RELEASE_BASE"
+  echo "downloaded latest release payload"
   version=$(curl -fsSL "$API_LATEST" 2>/dev/null | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)
   [ -n "$version" ] || version="latest"
 
-  echo "verifying checksum ..."
+  echo "verifying checksum"
   # shellcheck disable=SC2086  # SHA_CHECK intentionally unquoted (two words)
   if ! (cd "$TMP" && $SHA_CHECK SHA256SUMS); then
     echo "install.sh: checksum verification FAILED — refusing to install" >&2
@@ -276,12 +295,9 @@ case "$MODE" in
 esac
 
 echo
+echo "Installed opencode-agents $INSTALLED_VERSION"
+echo "Components: $INSTALLED_COMPONENTS"
+echo
 echo "Next steps:"
-echo "  1. Make sure the Linear MCP server is configured in your target repo's opencode.jsonc:"
-echo "     \"mcp\": { \"linear-project\": { \"type\": \"remote\", \"url\": \"https://mcp.linear.app/mcp\", \"enabled\": true } }"
-echo "  2. Add '.plan/' to the .gitignore of every repo you run the driver in (snippets/gitignore.txt in this repo)"
-echo "  3. Pick a model/variant with /models — all driver phases inherit the session model"
-echo "  4. The driver-viz sidebar plugin (installed under plugins/, unless --no-plugin) shows the"
-echo "     live phase flow chart of the current /driver run in the TUI sidebar"
-echo "  5. Driver helper scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh) are installed under"
-echo "     \${XDG_CONFIG_HOME:-~/.config}/opencode/agent-scripts/ — the driver agents call them from there"
+echo "  1. Add '.plan/' to the .gitignore of every repo you run /driver in (see snippets/gitignore.txt)"
+echo "  2. Get started from a repo root in OpenCode: /driver ABC-123"
