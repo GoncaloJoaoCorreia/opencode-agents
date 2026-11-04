@@ -111,7 +111,7 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
       `$planDir/qa-command.txt` with the edit tool, then run
       `"$SCRIPTS/qa-command.sh" set --repo "$repoRoot" --command-file "$planDir/qa-command.txt"`
       (the command text never travels via argv). Skip detection and the question.
-   2. Else run `"$SCRIPTS/qa-command.sh" get --repo "$repoRoot"` and capture the
+   2. Else if `params.force` is NOT set: run `"$SCRIPTS/qa-command.sh" get --repo "$repoRoot"` and capture the
       single-line JSON stdout (`{ "command": ...|null, "source": "cache" }`) into
       `$planDir/qa-cache.json`. On a non-zero exit, surface the script's stderr and exit
       code to the driver and stop — never swallow them (exit 0 with `"command": null` is
