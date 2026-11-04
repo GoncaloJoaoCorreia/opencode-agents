@@ -268,29 +268,36 @@ export function DriverSection(props: {
                       </span>
                     </text>
                   </Show>
-                  <text>
-                    <span style={{ fg: glyphFg(), bold: status() === "running" }}>{glyph()}{" "}</span>
-                    <span style={{ fg: labelFg(), bold: status() === "running" }}>{phase.label}</span>
-                    <Show when={phase.id === "implement" && subtaskRowVisible(tasks())}>
-                      <span style={{ fg: c().muted }}>
-                        {"  "}
-                        {counts().done}/{counts().total}
-                      </span>
-                    </Show>
+                  <box flexDirection="row">
+                    <text>
+                      <span style={{ fg: glyphFg(), bold: status() === "running" }}>{glyph()}{" "}</span>
+                      <span style={{ fg: labelFg(), bold: status() === "running" }}>{phase.label}</span>
+                      <Show when={phase.id === "implement" && subtaskRowVisible(tasks())}>
+                        <span style={{ fg: c().muted }}>
+                          {"  "}
+                          {counts().done}/{counts().total}
+                        </span>
+                      </Show>
+                    </text>
                     <Show when={phase.id === "plan" && status() === "done"}>
-                      {/* span, not text: a <text> is not a valid child of a <text> node.
-                          Padding stays outside the underlined span so the underline
-                          only covers the label, not the leading spaces. */}
-                      <span style={{ fg: c().muted }}>{"  "}</span>
-                      {/* underline only the label — brackets stay plain (nested span
-                          inherits fg, ORs attributes) */}
-                      <span style={{ fg: c().link }} onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
-                        {"["}
-                        <span style={{ underline: true }}>Open Plan</span>
-                        {"]"}
-                      </span>
+                      {/* Sibling text, not a nested one: a text node is not a valid child
+                          of a text node, and a mouse handler on a span is silently dropped
+                          by the @opentui/solid reconciler (only href/style are handled on
+                          text nodes) — a <text> is a scene Renderable, so the handler
+                          attaches and hit-testing reaches it (G-28). Padding stays outside
+                          the underlined span so the underline only covers the label. */}
+                      <text onMouseDown={() => props.onOpenPath(planFilePath(r()))}>
+                        <span style={{ fg: c().muted }}>{"  "}</span>
+                        {/* underline only the label — brackets stay plain (nested span
+                            inherits fg, ORs attributes) */}
+                        <span style={{ fg: c().link }}>
+                          {"["}
+                          <span style={{ underline: true }}>Open Plan</span>
+                          {"]"}
+                        </span>
+                      </text>
                     </Show>
-                  </text>
+                  </box>
                   <Show
                     when={
                       phase.id === "implement" &&
