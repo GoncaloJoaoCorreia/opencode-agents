@@ -3,7 +3,7 @@
 //   ✓ Preplan
 //   ✓ Plan   [Open Plan]   <- clickable once the plan phase is done
 //   ┃ Implement  3/7
-//     ●●⠋○○○               <- per-task dots, colored by state, animated while running
+//     ●●◐○○○               <- per-task dots, colored by state, animated while running
 //   ○ Audit
 //   ...
 //   ──────────────
@@ -28,6 +28,8 @@ import {
   runDuration,
   runStartedAt,
   runningIndex,
+  subtaskRowVisible,
+  TASK_DOT_SPINNER,
   taskCounts,
   taskIndicators,
   type PhaseStatus,
@@ -68,7 +70,8 @@ function dotGlyph(kind: TaskKind, animate: boolean, tick: number): string {
     case "skipped":
       return "⊘"
     case "running":
-      return animate ? SPINNER[tick % SPINNER.length] : "◐"
+      // circular dot spinner (one cell, pairs with ○/●); animate-off = frame 0 ◐
+      return animate ? TASK_DOT_SPINNER[tick % TASK_DOT_SPINNER.length] : TASK_DOT_SPINNER[0]
     default:
       return "○"
   }
@@ -268,7 +271,7 @@ export function DriverSection(props: {
                   <text>
                     <span style={{ fg: glyphFg(), bold: status() === "running" }}>{glyph()}{" "}</span>
                     <span style={{ fg: labelFg(), bold: status() === "running" }}>{phase.label}</span>
-                    <Show when={phase.id === "implement" && counts().total > 0}>
+                    <Show when={phase.id === "implement" && subtaskRowVisible(tasks())}>
                       <span style={{ fg: c().muted }}>
                         {"  "}
                         {counts().done}/{counts().total}
@@ -292,7 +295,7 @@ export function DriverSection(props: {
                     when={
                       phase.id === "implement" &&
                       (status() === "running" || status() === "failed") &&
-                      counts().total > 0
+                      subtaskRowVisible(tasks())
                     }
                   >
                     <text>

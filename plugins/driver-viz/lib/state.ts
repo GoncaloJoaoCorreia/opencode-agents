@@ -230,6 +230,22 @@ export function effectiveStatuses(statuses: PhaseStatus[]): PhaseStatus[] {
   })
 }
 
+/**
+ * Circular spinner for the in-progress Implement subtask dot: same one-cell silhouette
+ * as ○ (pending) / ● (done), no braille codepoints. Frame 0 (◐) doubles as the
+ * animate-off fallback. The phase-level running glyph keeps the braille spinner.
+ */
+export const TASK_DOT_SPINNER = ["◐", "◓", "◑", "◒"]
+
+/**
+ * Whether the Implement subtask dots row and the done/total counter render at all:
+ * hidden when the plan has zero or one task (single-task runs show neither — the
+ * counter would always read 0/1 or 1/1), shown for two or more tasks.
+ */
+export function subtaskRowVisible(tasks: TaskEntry[] | undefined): boolean {
+  return (tasks?.length ?? 0) > 1
+}
+
 export type TaskKind = "done" | "failed" | "skipped" | "running" | "pending"
 
 export interface TaskIndicator {

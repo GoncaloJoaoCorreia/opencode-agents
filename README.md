@@ -167,7 +167,7 @@ run, read live from `.plan/<slug>/state.json`:
 ✓ Preplan
 ✓ Plan   [Open Plan]
 ┃ Implement  3/7    ← connector pulses while the phase above runs
-  ●●⠋○○○           ← per-task dots, colored by state, animated while implement runs
+  ●●◐○○○           ← per-task dots, colored by state, animated while implement runs
 ▸ Audit
 ○ Review
 ○ QA
@@ -180,6 +180,9 @@ Total 1h02m03s · Tokens 128k · +412 -37 · [Open report]
 
 `✓` done · `✗` failed · `⊘` skipped · `○` pending · spinner on the running phase (only one
 phase shows as running at a time; the spinner is tinted a guaranteed non-white color).
+The in-progress per-task dot animates through the circular set `◐◓◑◒` (the phase-level
+running glyph keeps the braille spinner); when the implement phase has a single task,
+neither the dots row nor the `n/total` counter is rendered.
 Worktree runs (`--worktree`) show up automatically — the driver moves the session into
 the worktree. While a phase runs, the header shows an elapsed-time counter (`⏱`, from the
 earliest `phases.*.started_at`); once the plan phase is done, the Plan row offers a
