@@ -17,14 +17,15 @@
 # opencode-agents.manifest into the target; the manifest drives stale-file cleanup on
 # reinstall. Nothing outside agents/ commands/ skills/ agent-scripts/ plugins/
 # (unless --no-plugin) and those two meta files is ever touched. .agent/ dirs inside
-# the payload (this repo's own driver history) and __pycache__/ are EXCLUDED from the
-# manifest and the install: OpenCode discovers agents/**/*.md recursively, so an
-# installed agents/.agent/*.md would be registered as agents (".agent/history" etc.).
+# the payload (legacy driver history from older versions) and __pycache__/ are
+# EXCLUDED from the manifest and the install: OpenCode discovers agents/**/*.md
+# recursively, so an installed agents/.agent/*.md would be registered as agents
+# (".agent/history" etc.).
 # plugins/driver-viz is
 # auto-discovered by OpenCode from <config>/plugins/driver-viz/ — no cli.json edit
 # needed. agent-scripts/ holds the driver helper scripts (detect-forge.sh,
-# detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh,
-# agent-context-check.py) that the driver agents call from <config>/agent-scripts/.
+# driver-state.py, save-linear-attachments.py, qa-command.sh) that the driver agents
+# call from <config>/agent-scripts/.
 #
 # Prerequisites (checked before anything is installed, in both modes): POSIX sh, git
 # and python3 are REQUIRED (the installed agent-scripts/ need them) — the install
@@ -71,7 +72,7 @@ EOF
 check_prereqs() {
   # python3 must actually EXECUTE (a broken stub on PATH must fail), not just exist
   if ! python3 --version >/dev/null 2>&1; then
-    echo "install.sh: python3 is required (agent-scripts/driver-state.py and detect-modules.py need it) but could not be executed" >&2
+    echo "install.sh: python3 is required (agent-scripts/driver-state.py and save-linear-attachments.py need it) but could not be executed" >&2
     echo "  install python3 (e.g. 'brew install python3', 'apt install python3', ...) and re-run" >&2
     exit 1
   fi
@@ -182,7 +183,7 @@ install_payload() {
     dirs="$dirs plugins"
   fi
   # -L so symlinked placeholder agents (plan-thorough.md) are listed too.
-  # Exclude .agent/ (driver history — would be discovered as agents) and __pycache__/
+  # Exclude .agent/ (legacy driver history — would be discovered as agents) and __pycache__/
   # shellcheck disable=SC2086  # $dirs is an intentional word list
   (cd "$payload" && find -L $dirs -type f ! -path '*/.agent/*' ! -path '*/__pycache__/*' | LC_ALL=C sort) > "$new_list"
 
@@ -220,7 +221,7 @@ install_payload() {
     cp -RL "$payload/plugins/." "$DEST/plugins/"
   fi
 
-  # strip driver-history + bytecode dirs that cp -RL carried along: OpenCode
+  # strip legacy .agent/ + bytecode dirs that cp -RL carried along: OpenCode
   # discovers agents/**/*.md recursively, so an installed .agent/*.md would be
   # registered as an agent. Also cleans leftover empty dirs from older installs
   # (the stale-file loop above already rm -f's the manifest-listed files in them).

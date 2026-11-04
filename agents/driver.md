@@ -1,5 +1,5 @@
 ---
-description: Orchestrates a full feature development cycle (preplan → plan → implement → spec-audit → code-review → quality-gate → write-history → pr) by spawning one driver/* subagent per phase. Primary agent behind the /driver command.
+description: Orchestrates a full feature development cycle (preplan → plan → implement → spec-audit → code-review → quality-gate → pr) by spawning one driver/* subagent per phase. Primary agent behind the /driver command.
 mode: primary
 # NOTE: no `model:` on purpose — inherits the session's model/variant (user sets it via /models).
 permissions:
@@ -53,7 +53,7 @@ dirty-file list. Grammar:
 - First positional token: a Linear issue key (matches `^[A-Z][A-Z0-9]*-[0-9]+$`) or a raw
   spec (pasted text / file path).
 - `--phases a,b,c`: comma-separated subset of the phase registry (below). Default: all.
-- `--skip a,b,c`: comma-separated phases to SKIP — each name must be one of the 8 registry
+- `--skip a,b,c`: comma-separated phases to SKIP — each name must be one of the 7 registry
   phases (unknown name → stop and report). Skipped phases get `state.phases[p].status =
   "skipped"` and are never spawned. Stored as `params.skip`. **`--phases` and `--skip` are
   mutually exclusive — passing both is an error.** On a FRESH run (no state.json yet),
@@ -151,8 +151,7 @@ If it exists, `merge` a patch — never clobber.
 | 4 | spec-audit    | `driver/spec-audit`    | report-only; spawned per task (scope=task) in the fan-out AND once at cycle scope (scope=cycle); YOU run bounded repair rounds per gate. Per-task spawns are skipped for a single-task manifest when the cycle-scope gates run (verdict recorded as `skipped` without spawning) |
 | 5 | code-review   | `driver/code-review`   | cycle-scope only; same round-loop pattern                   |
 | 6 | quality-gate  | `driver/quality-gate`  | like spec-audit (the single-task manifest skip applies); cycle scope always runs the full state.qa.command; YOU run bounded repair rounds per gate |
-| 7 | write-history | `driver/write-history` | appends `<module>/.agent/*.md` (repo-root `.agent/` for root-level files) AND commits them (docs commit) — records only what is worth future reference; nothing is appended when nothing meaningful happened |
-| 8 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR/MR vs the default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`) |
+| 7 | pr            | `driver/pr`            | pushes the branch, opens/updates the PR/MR vs the default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`) |
 
 Mechanics for every spawn: `subagent` tool, foreground, `agent` = agent ID,
 `description` = "<phase> <slug>", `prompt` = ONLY { statePath, the phase's slice of state,
@@ -164,15 +163,14 @@ skips) goes through `driver-state.py` (`set`/`push`/`merge`), never by hand
 are spawned MANY times inside the implement fan-out — those task-scope spawns do NOT set
 `phases[...]` status; only the cycle-scope spawns in registry order do.
 
-- **Effective phase set + `--skip`:** the run set is `params.phases` if set, else all 8
+- **Effective phase set + `--skip`:** the run set is `params.phases` if set, else all 7
   registry phases in order, MINUS `params.skip` (`--phases` + `--skip` together already
   errored in step 1). For each phase in `params.skip`, immediately write
   `state.phases[p] = { status: "skipped", summary: "skipped via --skip", completed_at }`
   and never spawn it — including its per-task spawns in the implement fan-out below.
 - **Prerequisite guard before every spawn:** verify the phase's inputs exist — implement
   needs `state.plan.manifest`; the cycle-scope spec-audit/quality-gate/code-review need at
-  least one task commit; write-history needs implement runs; pr needs commits on the cycle
-  branch. If an input is missing because its producing phase was skipped (or never ran),
+  least one task commit; pr needs commits on the cycle branch. If an input is missing because its producing phase was skipped (or never ran),
   STOP with an error naming the missing phase — do not spawn into the void.
 
 - **implement fan-out:** read the manifest at `state.plan.manifest`. Topologically sort

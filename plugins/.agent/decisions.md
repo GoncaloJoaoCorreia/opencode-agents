@@ -1,6 +1,0 @@
-## 2026-11-03 — G-21 — Filter sidebar runs by slot-input sessionID, not a custom tool
-- Context: multiple driver runs' `.plan/` dirs accumulate in a repo; the sidebar must show only the current session's runs, and anomalyco/opencode#12324 proposed a custom-tool workaround for getting the session ID.
-- Options considered: (a) custom tool per anomalyco/opencode#12324; (b) read the current sessionID from the sidebar.content slot render input (`SlotMap["sidebar.content"].sessionID`, fallback `ui.router.current()`) and filter scanned runs by `state.session_id === currentSessionID`, auto-switching to new matching runs and making `/driver-viz` cycle session-scoped; fall back to the unfiltered most-recent run when the ID is null/unknown or no run matches.
-- Decision: (b), verified against the installed OpenCode v2.2.5 host.
-- Rationale: the slot input is a built-in, verified host API — no custom tooling to maintain; loose fallbacks degrade to the previous behavior instead of crashing on older/changed hosts; auto-switch and the palette cycle stay consistent with the filter.
-- Consequences: runs written by older drivers (`session_id: null`) are still shown via the fallback until a run of the current session exists; mid-write runs match once their state.json parses with a session_id; `filterRunsBySession` is covered by node --test.

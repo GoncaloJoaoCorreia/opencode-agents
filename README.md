@@ -53,24 +53,20 @@ Re-run it after pulling changes.
   `opencode-agents.manifest` into the config dir; the manifest lets reinstalls remove files
   that were deleted upstream. Installs only ever touch `agents/`, `commands/`, `skills/`,
   `agent-scripts/`, `plugins/` (unless `--no-plugin`) and those two meta files.
-- **`.agent/` and `__pycache__/` are never installed.** This repo is itself a driver
-  target, so it contains `agents/.agent/`, `skills/.agent/`, … (driver history) — OpenCode
-  discovers `agents/**/*.md` recursively, so shipping them would register
-  `.agent/history` / `.agent/decisions` as agents. The release tarball and the installer
-  both strip them; re-running the installer also removes previously installed copies.
+- **`.agent/` and `__pycache__/` are never installed.** OpenCode discovers
+  `agents/**/*.md` recursively, so shipping a legacy `.agent/*.md` (old driver history)
+  would register `.agent/history` / `.agent/decisions` as agents. The release tarball and
+  the installer both strip them; re-running the installer also removes previously
+  installed copies.
 - **Driver helper scripts.** `agent-scripts/` installs to
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the six scripts
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the four scripts
   the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
-  mirroring `skills/driver-conventions/SKILL.md` §7.1), `detect-modules.py` (module
-  detection + file→module mapping for the write-history phase, §4/§8), `driver-state.py`
+  mirroring `skills/driver-conventions/SKILL.md` §7.1), `driver-state.py`
   (atomic, merge-never-clobber access to `.plan/<slug>/state.json`),
   `save-linear-attachments.py` (eager download of a Linear issue's attachments at
   spec-fetch time — preplan/plan persist `.plan/<slug>/spec.md` with local links, G-23)
   and `qa-command.sh` (the repo-local QA-command cache `git config driver.qa`, §7.3 —
-  G-24) and `agent-context-check.py` (context-length check over all
-  `.agent/{history,decisions}.md` files — write-history flags over-long files via
-  `state.warnings`, §4/§8 — G-31). See `agent-scripts/README.md` in this repo for their
-  contracts.
+  G-24). See `agent-scripts/README.md` in this repo for their contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -121,7 +117,7 @@ flowchart TD
     end
 
     FAN --> AUDC["spec-audit · cycle"] --> REV[code-review] --> QAC["quality-gate (full QA)"]
-    QAC --> HIST[write-history] --> PR["pr (push + open)"]
+    QAC --> PR["pr (push + open)"]
 
     style DRV fill:#e1f5fe,stroke:#01579b,stroke-width:2px
 ```
@@ -134,7 +130,6 @@ flowchart TD
 | spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there). Per-task spawns are skipped for a single-task manifest when the cycle-scope gates run (verdict recorded as `skipped`) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds. Per-task runs are skipped for a single-task manifest when the cycle-scope gates run (verdict recorded as `skipped`) |
-| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them — only what is worth future reference; nothing is appended when nothing meaningful happened; over-long `.agent` files are flagged as `state.warnings` via `agent-context-check.py` (never fatal) |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
 Per-task gating: right after each task's commit
@@ -176,7 +171,6 @@ run, read live from `.plan/<slug>/state.json`:
 ▸ Audit
 ○ Review
 ○ QA
-○ History
 ○ PR
 ──────────
 Total 1h02m03s · Tokens 128k · +412 -37 · [Open report]
@@ -210,7 +204,7 @@ disable the animation, register the plugin with options in `cli.json`:
 /driver ABC-123                                  # full cycle, fetches the Linear issue
 /driver "add rate limiting to the API"           # raw spec — the driver asks for a slug (e.g. ABC-123)
 /driver ABC-123 --phases plan,implement          # only some phases (progress is kept, so this resumes)
-/driver ABC-123 --skip quality-gate,write-history # all phases except these (cannot be combined with --phases)
+/driver ABC-123 --skip code-review,quality-gate # all phases except these (cannot be combined with --phases)
 /driver ABC-123 --worktree                       # whole cycle inside a new git worktree named ABC-123
 /driver ABC-123 --max-rounds 3 --qa "npm test"   # cap repair rounds, pin the QA command
 /driver ABC-123 --force                          # re-run the requested phases even if already done
@@ -244,14 +238,6 @@ disable the animation, register the plugin with options in `cli.json`:
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
 final `pr` phase, which pushes the branch and opens the PR.
-- **`<module>/.agent/history.md` and `decisions.md`** — committed by the final phase as a
-  `docs(driver): ...` commit; repo-root-level changes land in the repo-root `.agent/`.
-  Only entries worth future reference are recorded — nothing is appended when nothing
-  meaningful happened.
-  Module dirs are detected by the shipped `agent-scripts/detect-modules.py` (build
-  system first, in order Gradle → Maven → npm-family → Cargo; fallback: top-level
-  dirs, plus `src/*` when a root `src/` exists), and each changed file maps to the
-  longest matching module dir.
 - **Branch** — `feat/<slug>`, created automatically on protected branches.
 
 ## Requirements & limitations
@@ -259,7 +245,7 @@ final `pr` phase, which pushes the branch and opens the PR.
 - **Install requires `python3` and `git`.** `install.sh` hard-fails with a clear message
   before installing (or downloading, in release mode) when `python3` cannot execute or
   `git` is missing — the installed `agent-scripts/` (`driver-state.py`, `detect-forge.sh`,
-  `detect-modules.py`) need both. A forge CLI (`gh` / `glab` / `forgejo-cli`) is optional: only the `pr` phase
+  `save-linear-attachments.py`) need both. A forge CLI (`gh` / `glab` / `forgejo-cli`) is optional: only the `pr` phase
   uses one, and it degrades gracefully (skips with a note) without it.
 - **Interactive TUI only.** The driver asks questions along the way (slug, plan approval,
   QA command, retries), so headless `opencode run` is not supported.
@@ -281,6 +267,6 @@ final `pr` phase, which pushes the branch and opens the PR.
 ## Hacking on this library
 
 The repo layout, file-format contracts (`.plan/<slug>/state.json`, `manifest.json`, commit
-and history formats — single source of truth in `skills/driver-conventions/SKILL.md` with
+message format — single source of truth in `skills/driver-conventions/SKILL.md` with
 JSON schemas beside it), extension points, and hard-won gotchas are documented in
 [AGENTS.md](AGENTS.md).

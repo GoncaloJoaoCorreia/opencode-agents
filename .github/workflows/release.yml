@@ -124,9 +124,9 @@ jobs:
           mkdir -p "$stage_root/opencode-agents"
           # -L dereferences symlinked placeholder agents (plan-thorough.md)
           cp -RL agents commands skills snippets plugins agent-scripts install.sh LICENSE "$stage_root/opencode-agents/"
-          # strip this repo's own driver-history + bytecode dirs from the payload:
-          # OpenCode discovers agents/**/*.md recursively, so shipped .agent/*.md
-          # would be installed and registered as agents (".agent/history" etc.)
+          # strip any gitignored .agent/ (legacy driver history) + bytecode dirs from
+          # the payload: OpenCode discovers agents/**/*.md recursively, so shipped
+          # .agent/*.md would be installed and registered as agents (".agent/history" etc.)
           find "$stage_root/opencode-agents" -type d \( -name .agent -o -name __pycache__ \) -prune -exec rm -rf {} +
           tar -czf opencode-agents.tar.gz -C "$stage_root" opencode-agents
           sha256sum opencode-agents.tar.gz > SHA256SUMS
@@ -158,8 +158,8 @@ jobs:
           gh release download "$tag" --dir "$t" --pattern opencode-agents.tar.gz --pattern SHA256SUMS
           (cd "$t" && sha256sum -c SHA256SUMS)
           tar -xzf "$t/opencode-agents.tar.gz" -C "$t"
-          # --exclude: the checkout legitimately contains .agent/ (driver history)
-          # and __pycache__/; the payload deliberately strips them (see build step)
+          # --exclude: the checkout may contain gitignored .agent/ (legacy driver
+          # history) and __pycache__/ leftovers; the payload deliberately strips them
           diff -r --exclude=.agent --exclude=__pycache__ "$t/opencode-agents/agents" agents
           diff -r --exclude=.agent --exclude=__pycache__ "$t/opencode-agents/commands" commands
           diff -r --exclude=.agent --exclude=__pycache__ "$t/opencode-agents/skills" skills
@@ -172,10 +172,8 @@ jobs:
           test -f "$t/cfg/plugins/driver-viz/tui.tsx"
           test -f "$t/cfg/agent-scripts/detect-forge.sh"
           test -f "$t/cfg/agent-scripts/driver-state.py"
-          test -f "$t/cfg/agent-scripts/detect-modules.py"
           test -f "$t/cfg/agent-scripts/save-linear-attachments.py"
           test -f "$t/cfg/agent-scripts/qa-command.sh"
-          test -f "$t/cfg/agent-scripts/agent-context-check.py"
           test -f "$t/cfg/opencode-agents.manifest"
           # the payload must not carry .agent/ or __pycache__/ (they would be
           # discovered as agents / are bytecode junk)

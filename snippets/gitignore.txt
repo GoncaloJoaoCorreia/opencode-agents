@@ -1,3 +1,3 @@
 # Driver scratch space (plans, state) — not committed. Add to the .gitignore of
-# every repo you run /driver in. `.agent/` (history/decisions) IS committed.
+# every repo you run /driver in. The driver writes nothing else into the repo.
 .plan/

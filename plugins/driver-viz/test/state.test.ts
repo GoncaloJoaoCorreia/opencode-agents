@@ -45,7 +45,7 @@ test("slug regex accepts issue keys, rejects traversal and lowercase", () => {
   assert.ok(!SLUG_RE.test(""))
 })
 
-test("phase registry mirrors the 8 driver phases in order", () => {
+test("phase registry mirrors the 7 driver phases in order", () => {
   assert.deepEqual(PHASE_IDS, [
     "preplan",
     "plan",
@@ -53,10 +53,9 @@ test("phase registry mirrors the 8 driver phases in order", () => {
     "spec-audit",
     "code-review",
     "quality-gate",
-    "write-history",
     "pr",
   ])
-  assert.equal(PHASES.length, 8)
+  assert.equal(PHASES.length, 7)
 })
 
 test("findRepoRoot walks up to the nearest .git", () => {
@@ -108,12 +107,12 @@ test("scanRuns keeps only slug dirs, tolerates broken json, sorts by mtime desc"
 test("phaseStatus reads state, falls back to params.skip, then pending", () => {
   const state: DriverState = {
     phases: { preplan: { status: "done" }, plan: { status: "running" }, pr: { status: "failed" } },
-    params: { skip: ["write-history"] },
+    params: { skip: ["quality-gate"] },
   }
   assert.equal(phaseStatus(state, "preplan"), "done")
   assert.equal(phaseStatus(state, "plan"), "running")
   assert.equal(phaseStatus(state, "pr"), "failed")
-  assert.equal(phaseStatus(state, "write-history"), "skipped") // via params.skip
+  assert.equal(phaseStatus(state, "quality-gate"), "skipped") // via params.skip
   assert.equal(phaseStatus(state, "implement"), "pending")
   assert.equal(phaseStatus(null, "plan"), "pending") // unreadable state
 })
@@ -226,7 +225,7 @@ test("effectiveStatuses keeps only the first running phase, demotes later ones t
   assert.deepEqual(effectiveStatuses(["done", "running", "done"]), ["done", "running", "done"])
   assert.deepEqual(effectiveStatuses(["done", "pending", "failed"]), ["done", "pending", "failed"])
   // Audit fix: while implement runs, a second running phase (spec-audit) shows pending
-  const implFirst = effectiveStatuses(["done", "done", "running", "running", "pending", "pending", "pending", "pending"])
+  const implFirst = effectiveStatuses(["done", "done", "running", "running", "pending", "pending", "pending"])
   assert.equal(implFirst[2], "running")
   assert.equal(implFirst[3], "pending")
 })
@@ -314,10 +313,10 @@ test("planFilePath / reportFilePath are siblings of the run's state.json", () =>
 })
 
 test("runCompleted only when every phase is done/skipped", () => {
-  assert.equal(runCompleted(["done", "skipped", "done", "done", "done", "done", "done", "done"]), true)
-  assert.equal(runCompleted(["done", "running", "done", "done", "done", "done", "done", "done"]), false)
-  assert.equal(runCompleted(["done", "pending", "done", "done", "done", "done", "done", "done"]), false)
-  assert.equal(runCompleted(["done", "failed", "done", "done", "done", "done", "done", "done"]), false)
+  assert.equal(runCompleted(["done", "skipped", "done", "done", "done", "done", "done"]), true)
+  assert.equal(runCompleted(["done", "running", "done", "done", "done", "done", "done"]), false)
+  assert.equal(runCompleted(["done", "pending", "done", "done", "done", "done", "done"]), false)
+  assert.equal(runCompleted(["done", "failed", "done", "done", "done", "done", "done"]), false)
   assert.equal(runCompleted([]), false)
 })
 

@@ -82,8 +82,6 @@ LINES = [
     [("│", BORDER, False)],
     [("⊘ ", MUTED, False), ("QA", MUTED, False)],
     [("│", BORDER, False)],
-    [("○ ", MUTED, False), ("History", MUTED, False)],
-    [("│", BORDER, False)],
     [("○ ", MUTED, False), ("PR", MUTED, False)],
 ]
 

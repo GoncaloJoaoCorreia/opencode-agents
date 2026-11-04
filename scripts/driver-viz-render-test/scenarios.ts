@@ -67,7 +67,7 @@ export const scenarios: Scenario[] = [
           branch: "feat/TEST-1",
           created_at: at(60),
           phases: Object.fromEntries(
-            ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"].map(
+            ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "pr"].map(
               (p, i) => [p, { status: "done", started_at: at(60 - i * 5), completed_at: at(55 - i * 5) }],
             ),
           ),
@@ -89,7 +89,7 @@ export const scenarios: Scenario[] = [
     setup: (dir) => [
       run(dir, "TEST-1", 1000, {
         session_id: "ses_test",
-        params: { skip: ["code-review", "quality-gate", "write-history"] },
+        params: { skip: ["code-review", "quality-gate"] },
         phases: {
           preplan: { status: "done", started_at: at(10), completed_at: at(9) },
           plan: { status: "done", started_at: at(9), completed_at: at(8) },

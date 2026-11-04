@@ -19,11 +19,16 @@ else
 fi
 
 echo "== install.sh excludes .agent/ and __pycache__ from the payload =="
-# regression test: this repo's own driver history (agents/.agent/ etc.) and bytecode
-# caches must never be installed — OpenCode discovers agents/**/*.md recursively, so an
-# installed .agent/*.md would be registered as an agent (".agent/history" etc.)
+# regression test: .agent/ dirs and bytecode caches in the payload dirs must never be
+# installed — OpenCode discovers agents/**/*.md recursively, so an installed
+# .agent/*.md would be registered as an agent (".agent/history" etc.). This repo no
+# longer keeps its own .agent/ history (the driver no longer records it), so plant a
+# synthetic fixture to keep this test meaningful.
 install_tmp=$(mktemp -d)
-trap 'rm -rf "$install_tmp"' EXIT
+trap 'rm -rf "$install_tmp" agents/.agent skills/.agent' EXIT
+mkdir -p agents/.agent skills/.agent
+echo "# synthetic driver history" > agents/.agent/history.md
+echo "# synthetic decisions" > skills/.agent/decisions.md
 ./install.sh --source --dest "$install_tmp/cfg" >/dev/null
 if find "$install_tmp/cfg" -type d \( -name .agent -o -name __pycache__ \) | grep -q .; then
   echo "FAIL: .agent/ or __pycache__/ installed into $install_tmp/cfg:" >&2

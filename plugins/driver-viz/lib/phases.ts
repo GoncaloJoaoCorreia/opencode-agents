@@ -7,7 +7,6 @@ export const PHASES = [
   { id: "spec-audit", label: "Audit" },
   { id: "code-review", label: "Review" },
   { id: "quality-gate", label: "QA" },
-  { id: "write-history", label: "History" },
   { id: "pr", label: "PR" },
 ] as const
 

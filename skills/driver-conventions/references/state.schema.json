@@ -75,11 +75,11 @@
       "properties": {
         "phases": {
           "type": "array",
-          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"] }
+          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "pr"] }
         },
         "skip": {
           "type": "array",
-          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "write-history", "pr"] },
+          "items": { "enum": ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "pr"] },
           "description": "--skip: phases marked skipped and never spawned (incl. per-task gate spawns). Mutually exclusive with params.phases. On a fresh run preplan/plan may not be skipped; --force never un-skips"
         },
         "worktree": { "type": "boolean" },
@@ -299,24 +299,6 @@
               "round": { "type": "integer" },
               "commit": { "type": "string" },
               "failure_ids": { "type": "array", "items": { "type": "string" } }
-            }
-          }
-        }
-      }
-    },
-    "history": {
-      "type": "object",
-      "properties": {
-        "entries": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "module": { "type": "string", "description": "module name = module dir relative to the repo root (e.g. module1, src/core); \"root\" for repo-root-level changes" },
-              "agent_dir": { "type": "string", "description": "module dir holding the .agent/ folder (\".\" for the repo root); added in G-22 — additive extension, no field removed" },
-              "history_file": { "type": "string", "description": "<agent_dir>/.agent/history.md (G-22: per-module .agent/ folder; previously the root-level agent/ path)" },
-              "decision_file": { "type": ["string", "null"], "description": "<agent_dir>/.agent/decisions.md when real decisions were recorded, else null" },
-              "commit": { "type": ["string", "null"] }
             }
           }
         }

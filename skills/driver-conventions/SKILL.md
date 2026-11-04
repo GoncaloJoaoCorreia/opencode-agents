@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh, agent-context-check.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, QA-command cache (§7.3), phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, driver-state.py, save-linear-attachments.py, qa-command.sh — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, QA-command cache (§7.3), phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -17,7 +17,7 @@ exchange. If you change a format here, update the schemas in `references/` too.
 - Plan dir is `.plan/<slug>/` at the repo root; `.plan/` is gitignored in the target repo.
 - Dirty tree at start → the driver asks (default: abort).
 - Branch: on `main`/`master`/`develop`/`dev` the driver creates `feat/<slug>`.
-- Final phase `pr` (phase 8, in the default phase list) pushes the cycle branch and
+- Final phase `pr` (phase 7, in the default phase list) pushes the cycle branch and
   opens/updates a PR/MR via the forge CLI (`gh` for GitHub, `glab` for GitLab,
   `forgejo-cli` for Forgejo) against the repo's default branch (fallback `main`) —
   see §7. It is the ONLY phase allowed to push.
@@ -111,7 +111,7 @@ Schema: `references/state.schema.json`. Key rules:
   `qa: "pass"|"skipped"` (per-task verdicts are stored on the `plan.tasks[]` entry).
   **Single-task manifest skip:** when the manifest has exactly ONE task
   (`manifest.tasks.length === 1` — fixed after the plan phase, stable across resume) AND
-  both cycle-scope gates are in the effective run set (`params.phases` if set, else all 8
+  both cycle-scope gates are in the effective run set (`params.phases` if set, else all 7
   phases, MINUS `params.skip`, and neither `spec-audit` nor `quality-gate` has
   `status: "skipped"` in `state.phases`), the per-task gates are NOT spawned: the driver
   sets `plan.tasks[0].audit = "skipped"` and `plan.tasks[0].qa = "skipped"` (mirroring
@@ -158,7 +158,7 @@ Schema: `references/state.schema.json`. Key rules:
   verifications — make them concrete and runnable.
 - `tasks/<task-id>.md` — one detailed file per task; implement works from these.
 
-## 3. Commit messages (implement phase; write-history docs commit)
+## 3. Commit messages (implement phase)
 
 Conventional commits, scope REQUIRED (= module):
 
@@ -173,55 +173,15 @@ Refs: <ISSUE-ID>
 
 - Allowed types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `ci`, `build`.
 - One commit per task. Stage only the task's `files` globs. Never push (the `pr` phase owns pushing). No sign-off required.
-- write-history's own commit: `docs(driver): record history/decisions for <ISSUE-ID>`,
-  staging only `.agent/...` paths.
 
-## 4. History & decisions (write-history phase; committed in the target repo)
+## 4. History & decisions — REMOVED
 
-- `<module-dir>/.agent/history.md` — append-only. Entry template:
-
-  ```md
-  ## 2026-10-30 — ABC-123 — Short title
-  - What changed: ...
-  - Commits: `abc1234`, `def5678`
-  - Plan: `.plan/ABC-123/plan.md`
-  ```
-
-- `<module-dir>/.agent/decisions.md` — append-only, only for real decisions:
-
-  ```md
-  ## 2026-10-30 — ABC-123 — Chose X over Y
-  - Context: ...
-  - Options considered: ...
-  - Decision: ...
-  - Rationale: ...
-  - Consequences: ...
-  ```
-
-- Restraint: rationales belong in `decisions.md` — never in `history.md`, and history
-  entries avoid implementation details unless they matter for the history itself.
-  Append nothing when nothing is worth recording this cycle — appending nothing is a
-  valid outcome, for `history.md` and `decisions.md` alike.
-- Context limit (G-31): every `.agent/history.md` / `.agent/decisions.md` is checked
-  against a fixed 2,000 estimated tokens per file (`ceil(bytes/4)`) by the installed
-  `agent-scripts/agent-context-check.py` (§8). write-history pushes one
-  `state.warnings[]` entry per over-limit file — flagged, never fatal.
-- Repo-root-level changes (commits whose changed files are all at the repo root) go to
-  the repo-root `.agent/history.md` / `.agent/decisions.md`.
-- Module mapping (G-22): run the INSTALLED `agent-scripts/detect-modules.py` (§8) —
-  `detect-modules.py --repo <repoRoot> map <changed-files...>` prints one JSON object
-  mapping each file to its module dir; the LONGEST module dir that is a path-segment
-  prefix of the file wins (files nested inside a module belong to that module), and
-  files at the repo root or under no module map to `"."` (root `.agent/`). The script
-  detects module dirs from the repo's build system, first match wins: Gradle
-  (`settings.gradle(.kts)` includes) → Maven (root `pom.xml` `<modules>`) → npm-family
-  (root `package.json` workspaces / `pnpm-workspace.yaml`) → Cargo (`Cargo.toml`
-  `[workspace]` members); fallback when none matches: the repo's top-level directories
-  (one level deep), plus the directories under a root `src/` when one exists (one
-  extra level, never deeper). This script-driven detection REPLACES the old
-  "first path segment of the changed files under `src/`, else the first segment, else
-  `core`" rule.
-- One history entry per module per cycle (group the cycle's commits), not one per commit.
+The driver no longer records `<module>/.agent/history.md` / `decisions.md` — there is no
+write-history phase and no agent may create or edit `.agent/**`. The durable record of a
+cycle is the commits themselves (conventional format, module scope, `Driver-Task` /
+`Refs` trailers) plus the PR/MR description (the pr phase pulls risks & assumptions from
+`plan.md`). Old target repos may still contain `.agent/` dirs from earlier driver
+versions — they are inert leftovers; nothing reads or writes them, delete them freely.
 
 ## 5. Phase-summary contract (phase → driver)
 
@@ -251,7 +211,7 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
 - Validate slugs before path use; never interpolate untrusted text (issue titles, spec
   bodies) into shell commands or into `!` blocks of command templates.
 - Only `driver/pr` pushes (PR phase); every other phase never pushes. Only
-  `driver/implement` commits code, only `driver/write-history` commits `.agent/` changes.
+  `driver/implement` commits (code; no other phase creates commits).
 - Phases never spawn subagents (nesting depth is 1) — the driver owns all loops and fan-out.
 - The `question` tool works in foreground children; the driver is interactive-only
   (headless `opencode run` is not supported).
@@ -350,13 +310,9 @@ addresses the scripts at the INSTALLED path — never the repo path:
 SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"
 ```
 
-If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/detect-modules.py"` /
-`"$SCRIPTS/driver-state.py"` / `"$SCRIPTS/save-linear-attachments.py"` /
-`"$SCRIPTS/qa-command.sh"` is missing or not
+If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/driver-state.py"` /
+`"$SCRIPTS/save-linear-attachments.py"` / `"$SCRIPTS/qa-command.sh"` is missing or not
 executable, stop with a clear "agent-scripts not installed — re-run install.sh" error.
-Documented exception: a missing `"$SCRIPTS/agent-context-check.py"` (old install) is NOT
-a hard stop for write-history — it pushes a `state.warnings` entry ("re-run install.sh")
-and continues, because the context-length warning must never break a cycle.
 Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
 
 - **`detect-forge.sh`** — forge detection. §7.1 stays the SEMANTICS (the contract); this
@@ -391,21 +347,6 @@ Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python
     atomic write (tmp file + rename).
   - Exit codes: `0` ok, `1` = `get` path missing, `2` = misuse / invalid JSON / missing
     file / bad `.plan/<slug>` path — always with a stderr message.
-- **`detect-modules.py`** — module detection + file→module mapping; the MECHANISM behind
-  the §4 history layout (write-history calls it — agents must NOT re-implement the
-  detection inline). python3 stdlib only. Invocation:
-  `"$SCRIPTS/detect-modules.py" [--repo DIR] modules` and
-  `"$SCRIPTS/detect-modules.py" [--repo DIR] map FILE...`
-  - Prints exactly ONE JSON object (one line) on stdout:
-    `modules` → `{ "repo": "<abs path>", "build_system": "gradle|maven|npm|cargo|fallback", "modules": [ { "name": "<dir>", "dir": "<dir>" }, ... ] }`;
-    `map` → `{ "<file repo-relative>": "<module dir or .>" }` — the longest module-dir
-    prefix wins, `"."` = repo root / under no module dir. FILEs may be repo-relative or
-    absolute; files outside the repo are an error.
-  - Build-system detection, first match wins: Gradle → Maven → npm-family → Cargo;
-    fallback = top-level dirs plus `src/*` when a root `src/` exists (never deeper).
-  - Exit codes: `0` = one JSON object on stdout; `2` = error (bad flag, unreadable repo,
-    file outside repo) with a message on stderr and EMPTY stdout. `--help` → usage on
-    stdout, exit 0.
 - **`save-linear-attachments.py`** — eager download of Linear-hosted attachment URLs
   (G-23): the MECHANISM behind persisting `.plan/<slug>/spec.md` for linear sources with
   working attachment links (their signed uploads.linear.app URLs expire minutes after the
@@ -456,25 +397,6 @@ Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python
     repo, missing/unreadable `--command-file`, both or neither of
     `--command`/`--command-file`, invalid command) with a message on stderr and EMPTY
     stdout. `--help` → usage on stdout, exit 0.
-- **`agent-context-check.py`** — context-length check over ALL
-  `.agent/{history,decisions}.md` files of a target repo (G-31); the MECHANISM behind
-  the §4 context limit (write-history calls it after its docs commit and warns via
-  `state.warnings[]` — over-limit is never fatal). python3 stdlib only, read-only,
-  idempotent. Invocation:
-  `"$SCRIPTS/agent-context-check.py" [--repo DIR]`
-  - Scans every `.agent/history.md` and `.agent/decisions.md` at any depth (default
-    repo: cwd), pruning `.git/`, `.plan/`, every other hidden dir (except `.agent`
-    itself), `node_modules/` and `__pycache__/`; an unreadable individual file is
-    skipped with a stderr note and does not affect `ok`.
-  - Prints exactly ONE JSON object (one line) on stdout:
-    `{ "repo": "/abs/repo", "limit_tokens": 2000, "files": [ { "path", "lines", "bytes", "tokens_est", "over_limit" } ], "over_limit": [...], "ok": bool }`
-    — `files` sorted by repo-relative `path`; `tokens_est` = `ceil(bytes/4)`; a file
-    is over the limit when `tokens_est > 2000` (exactly 2000 is NOT over); the limit
-    is a fixed constant reported as `limit_tokens` — no override flag; `over_limit`
-    = the subset of `files` with `over_limit: true`; `ok` = no file over the limit.
-  - Exit codes: `0` = JSON on stdout — also when over-limit (over-limit is data,
-    `"ok": false`, never an error); `2` = misuse / unknown flag / unreadable `--repo`
-    (message + usage on stderr, EMPTY stdout). `--help` → usage on stdout, exit 0.
 - **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
   `driver-state.py merge "$statePath" patch.json`,
   `driver-state.py push "$statePath" implement.runs "$entryJson"`,

@@ -50,8 +50,7 @@ cycle-scope gates in the run set, the per-task gate itself is skipped (the drive
      skip the task). Never commit someone else's uncommitted work into your task commit.
    - Message per conventions: `<type>(<module>): <subject>` + body + trailers
      `Driver-Task: <task-id>` and `Refs: <slug>`. Module = first path segment of the changed
-     files under `src/`, else first segment, else `core` (commit scope only — history
-     placement uses `detect-modules.py`, see driver-conventions §4).
+     files under `src/`, else first segment, else `core` (commit scope only).
      Fix mode: type `fix`, trailer `Driver-Fix-Round: <round>` (plus `Driver-Fix-Task:
      <task-id>` when `scope === "task"`) instead of `Driver-Task`; keep the `Refs` trailer.
    - NEVER push. NEVER amend — the commit SHA must stay stable (state references it).

@@ -33,13 +33,14 @@ plugin, both including the agent-scripts unit suite).
   `agents/ commands/ skills/ agent-scripts/ plugins/` (plugins/ only without
   `--no-plugin`) + those two meta files.
 - **`.agent/` and `__pycache__/` inside the payload dirs are excluded** from the release
-  tarball and the install (manifest list + `rm -rf` after the copy). This repo is itself a
-  driver target, so it has `agents/.agent/`, `skills/.agent/`, … — OpenCode discovers
+  tarball and the install (manifest list + `rm -rf` after the copy). OpenCode discovers
   `agents/**/*.md` recursively, so an installed `agents/.agent/*.md` would register as
-  agents (`.agent/history`, `.agent/decisions`). `scripts/validate.sh` regression-tests
-  the exclusion by running `install.sh --source` into a temp dir; release.yml's self-test
-  asserts it on the downloaded payload. Re-running `./install.sh` also cleans previously
-  installed copies via the manifest stale-file loop.
+  agents (`.agent/history`, `.agent/decisions`) — the driver no longer records history,
+  so this is defense against legacy leftovers in old checkouts. `scripts/validate.sh`
+  regression-tests the exclusion by planting a synthetic `.agent/` fixture, running
+  `install.sh --source` into a temp dir, and asserting it is not installed; release.yml's
+  self-test asserts it on the downloaded payload. Re-running `./install.sh` also cleans
+  previously installed copies via the manifest stale-file loop.
 - Install is **copy-based on purpose** (`cp -RL`): do NOT symlink these dirs into
   `~/.config/opencode/` or `.opencode/` — OpenCode's discovery skips symlinked agent files
   (e.g. the `agents/driver/plan-thorough.md` symlink placeholder won't register).
@@ -59,12 +60,11 @@ commands/driver.md          # /driver entry point (static `!` shell blocks — s
 commands/phases/*.md        # standalone /phases/<phase> wrappers (subagent: true)
 skills/driver-conventions/  # THE single source of truth for all shared contracts
 agent-scripts/              # shipped helper scripts the driver agents call from <config>/agent-scripts/
-                            #   (detect-forge.sh = forge detection, detect-modules.py = module detection,
-                            #    driver-state.py = atomic state.json access, save-linear-attachments.py =
-                            #    eager Linear attachment download (G-23), qa-command.sh = repo-local
-                            #    QA-command cache driver.qa (G-24), agent-context-check.py = .agent
-                            #    context-length check over history/decisions.md (G-31);
-                            #    tests in agent-scripts/tests/, gated by scripts/validate.sh)
+                            #   (detect-forge.sh = forge detection, driver-state.py = atomic
+                            #    state.json access, save-linear-attachments.py = eager Linear
+                            #    attachment download (G-23), qa-command.sh = repo-local QA-command
+                            #    cache driver.qa (G-24); tests in agent-scripts/tests/, gated by
+                            #    scripts/validate.sh)
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
 docs/                       # repo-only docs (NOT in the release payload): driver-viz-sidebar.png = the README screenshot
 plugins/driver-viz/         # TUI-only plugin: animated sidebar flow chart of the current run
@@ -88,7 +88,7 @@ install.sh                  # dual-mode installer (source checkout vs checksum-v
 
 Reads `.plan/<slug>/state.json` at the repo root of the session's location (so `--worktree`
 runs show up — the driver moves the session into the worktree) via `fs.watch` + a 1s poll,
-and renders the 8-phase stepper in `sidebar.content`: `✓/✗/⊘/○` for done/failed/skipped/
+and renders the 7-phase stepper in `sidebar.content`: `✓/✗/⊘/○` for done/failed/skipped/
 pending, a braille spinner + pulsing connector on the running phase, per-task dots under
 implement, PR link in the header. Session-scoped: only runs whose `state.session_id`
 matches the current session's ID (sidebar.content slot input `sessionID`, fallback
@@ -171,8 +171,8 @@ the OpenCode binary.
 
 ## Contracts — one source of truth
 
-All file formats (`.plan/<slug>/state.json`, `manifest.json`, commit messages, history
-files, slug/branch/worktree policy) are defined in `skills/driver-conventions/SKILL.md`
+All file formats (`.plan/<slug>/state.json`, `manifest.json`, commit messages,
+slug/branch/worktree policy) are defined in `skills/driver-conventions/SKILL.md`
 with JSON schemas in `skills/driver-conventions/references/`. **If you change a format,
 update the schemas too**, and keep README.md's summary in sync.
 
@@ -204,7 +204,7 @@ update the schemas too**, and keep README.md's summary in sync.
   `commands/driver.md`'s `!` blocks are static on purpose.
 - Agent permissions are scoped to `driver` / `driver/*` only; `git push` is denied
   everywhere EXCEPT `driver/pr` (the PR phase owns pushing). Only `driver/implement`
-  commits code; only `driver/write-history` commits `.agent/`. Subagent nesting depth is 1 by default → the driver owns all loops/fan-out;
+  commits. Subagent nesting depth is 1 by default → the driver owns all loops/fan-out;
   phases must not spawn subagents and must be spawned in the foreground (`question` tool
   needs an interactive client — headless `opencode run` is NOT supported by the driver).
 - Shell is permissive by default in all driver agents (`shell *: allow`, no prompts).
@@ -213,12 +213,11 @@ update the schemas too**, and keep README.md's summary in sync.
   into shell commands.
 - Phase agents deliberately set no `model:` — they inherit the session's model (user picks
   via `/models`).
-- `.plan/` is scratch and gitignored in target repos; `.agent/` (per-module history/decisions) is committed there.
+- `.plan/` is scratch and gitignored in target repos — the driver writes nothing else into them.
 - Don't re-implement routine, scriptable logic inside agent prompts (inline shell/python
   in `agents/*.md`). If a phase needs mechanical, repeated work — git/forge probing, JSON
   merges of `state.json`, looping over files, parsing command output — put it in a
   shipped, unit-tested `agent-scripts/` script and call that from the prompt instead.
-  Precedent: `detect-forge.sh` + `driver-state.py` (G-20 / PR #1), `detect-modules.py`
-  (G-22); the mechanism and the
+  Precedent: `detect-forge.sh` + `driver-state.py` (G-20 / PR #1); the mechanism and the
   mandate live in `skills/driver-conventions/SKILL.md` §8. Inline logic in a prompt is
   only for one-off, phase-specific steps.

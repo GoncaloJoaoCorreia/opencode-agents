@@ -11,9 +11,8 @@ ${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/
 ## Prerequisites
 
 - POSIX `sh` and `git` (assumed present)
-- `python3` (hard prerequisite for `driver-state.py`, `detect-modules.py`,
-  `save-linear-attachments.py` and `agent-context-check.py`; the installer
-  hard-fails without it)
+- `python3` (hard prerequisite for `driver-state.py` and
+  `save-linear-attachments.py`; the installer hard-fails without it)
 - No `jq`, no third-party Python packages — all scripts are stdlib/POSIX only.
 
 ## detect-forge.sh
@@ -106,61 +105,6 @@ driver-state.py merge <state.json> <patch.json>
   never the whole state file
 - `--help` → usage on stdout, exit 0; misuse / invalid JSON / missing file →
   stderr + exit 2 (`get` on a missing path exits 1)
-
-## detect-modules.py
-
-Detects a target repo's module folders and maps changed files to them — the
-mechanism behind the per-module `.agent/` history layout
-(`skills/driver-conventions/SKILL.md` §4; called by `driver/write-history`).
-python3 stdlib only, executable, shebang `#!/usr/bin/env python3`.
-
-### Invocation
-
-```
-detect-modules.py [--repo DIR] modules
-detect-modules.py [--repo DIR] map FILE...
-```
-
-- `--repo DIR` — target repo root (default: cwd)
-- `modules` — print the detected build system + module dirs as one JSON object
-- `map FILE...` — map each FILE (repo-relative or absolute) to its module dir;
-  FILEs outside the repo are an error
-- `--help` — usage on stdout, exit 0
-
-### Output contract
-
-Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
-
-```json
-{ "repo": "/abs/repo", "build_system": "gradle|maven|npm|cargo|fallback", "modules": [ { "name": "module1", "dir": "module1" } ] }
-```
-
-for `modules`, and
-
-```json
-{ "module1/SomeFile.ts": "module1", "README.md": "." }
-```
-
-for `map` — the LONGEST detected module dir that is a path-segment prefix of the
-file wins (nested folders inside a module belong to the module); `"."` = repo
-root or under no module dir.
-
-Build-system detection, first match wins: **Gradle** (root `settings.gradle` /
-`settings.gradle.kts` `include(...)` statements, incl.
-`project(":x").projectDir = file(...)` overrides) → **Maven** (root `pom.xml`
-`<modules><module>...`) → **npm-family** (root `package.json` `workspaces` array
-or `{ "packages": [...] }` and/or root `pnpm-workspace.yaml` `packages:` globs) →
-**Cargo** (root `Cargo.toml` `[workspace]` members minus exclude). Fallback when
-no build system matches: the repo's top-level directories (one level deep), PLUS
-the directories under a root `src/` when one exists (one extra level, never
-deeper). Hidden dirs (`.git`, `.plan`, `.agent`, …) are never modules; the repo
-root itself is not a module entry.
-
-### Exit codes
-
-- `0` — exactly one JSON object on stdout
-- `2` — error (unknown flag, unreadable repo, file outside repo): message on
-  stderr, stdout stays EMPTY (pure JSON on success paths only)
 
 ## save-linear-attachments.py
 
@@ -294,62 +238,6 @@ JSON escaping byte-identical.
   `--command-file`, both or neither of `--command`/`--command-file`, invalid
   command): message + usage on stderr, stdout stays EMPTY
 
-## agent-context-check.py
-
-Context-length check over a target repo's `.agent` records (G-31): scans ALL
-`.agent/history.md` and `.agent/decisions.md` files — the payload write-history
-appends to, so files grown over previous cycles are caught too — and reports which
-of them exceed a fixed estimated-token limit. `driver/write-history` runs the
-INSTALLED script after its docs commit and pushes one `state.warnings[]` entry per
-over-limit file: flagged, never fatal (the docs commit and the `done` status are
-unaffected). python3 stdlib only, executable, shebang `#!/usr/bin/env python3`,
-read-only (never writes, idempotent — safe on every write-history invocation).
-
-### Invocation
-
-```
-agent-context-check.py [--repo DIR] [--help]
-```
-
-- `--repo DIR` — target repo root (default: cwd); must be a readable directory
-- `--help` — usage on stdout, exit 0
-
-### Scan scope
-
-- every `.agent/history.md` and `.agent/decisions.md` at any depth (`.agent` dirs
-  themselves ARE scanned)
-- pruned: `.git/`, `.plan/`, every other hidden dir (except `.agent` itself),
-  `node_modules/`, `__pycache__/` — a `.agent` inside them is never scanned
-- an unreadable individual file is skipped with a stderr note and does not affect
-  `ok`
-
-### Output contract
-
-Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
-
-```json
-{ "repo": "/abs/repo", "limit_tokens": 2000,
-  "files": [ { "path": "agents/.agent/history.md", "lines": 9, "bytes": 1234, "tokens_est": 309, "over_limit": false } ],
-  "over_limit": ["<repo-relative path>", ...],
-  "ok": true }
-```
-
-- `files` sorted by `path` (repo-relative, forward slashes); `over_limit` = the
-  subset of `files` with `over_limit: true`; `ok` = no file over the limit
-- `tokens_est` = `ceil(bytes / 4)`; a file is `over_limit` when
-  `tokens_est > limit_tokens` — exactly 2,000 is NOT over (8,000 bytes → 2,000
-  tokens → ok; 8,001 bytes → over)
-- the limit is the fixed constant `2000`, reported as `limit_tokens` — there is
-  NO override flag (tuning requires a code change)
-- empty repo (no `.agent` files): `files: []`, `over_limit: []`, `ok": true`, exit 0
-
-### Exit codes
-
-- `0` — JSON on stdout, INCLUDING when over-limit: over-limit is data
-  (`"ok": false` + the `over_limit` paths), never an error
-- `2` — misuse / unknown flag / unreadable `--repo`: message + usage on stderr,
-  stdout stays EMPTY (pure JSON on success paths only)
-
 ## Tests
 
 ```
@@ -361,10 +249,7 @@ executables first on PATH: known-host map, URL forms, probe order, cache
 semantics, `--no-cache`, error paths, single-JSON-line stdout),
 `tests/test-driver-state.py` (unittest in tmp dirs: validate, set/get/push/merge
 round-trips, never-delete merge, slug/path guard, atomicity, error paths), and
-`tests/test-detect-modules.py` (unittest with fixture repos: Gradle/Maven/npm/
-Cargo detection + precedence order, fallback depth rule incl. the `src/` extra
-level, root-file and nested-file mapping, CLI contract, exit codes 0/2 with empty
-stdout on error), `tests/test-save-linear-attachments.py` (unittest with a
+`tests/test-save-linear-attachments.py` (unittest with a
 local `http.server` stub on `127.0.0.1`, ephemeral port — no external network:
 `<linear-image>` and markdown-image extraction, host allowlist, download +
 rewrite to `attachments/...` links, filename sanitize/dedupe, Content-Type
@@ -374,15 +259,8 @@ stdout, exit codes 0/2, `--help`), `tests/test-qa-command.sh` (scratch git
 repos in `mktemp -d`: get on fresh/set round-trips incl. metachars, cache
 unset cases, empty/multi-line/CR/oversized command rejection, both/neither
 flag errors, non-repo `--repo`, unknown flags, `--help`, single-JSON-line
-stdout, trailing-newline trimming), `tests/test-agent-context-check.py`
-(unittest with fixture repos in tmp dirs: under/over limit + the exactly-2000
-boundary (8,000 bytes not over, 8,001 over), `ceil(bytes/4)` rounding, nested
-module `.agent` dirs, `.git`/`.plan`/`node_modules`/`__pycache__`/hidden-dir
-exclusion, empty repo, sort order, repo-relative paths, lines/bytes counts,
-unreadable-file skip with stderr note, single-line JSON stdout, exit 0 with
-over-limit (`"ok": false`) / exit 2 misuse+unreadable repo / `--help`), plus
+stdout, trailing-newline trimming), plus
 `sh -n` / `py_compile` syntax checks.
 Exits non-zero on any failure; prints `ok: detect-forge tests` /
-`ok: driver-state tests` / `ok: detect-modules tests` /
-`ok: save-linear-attachments tests` / `ok: qa-command tests` /
-`ok: agent-context-check tests` per suite.
+`ok: driver-state tests` / `ok: save-linear-attachments tests` /
+`ok: qa-command tests` per suite.
