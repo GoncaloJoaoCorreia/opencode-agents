@@ -232,6 +232,67 @@ Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
   `--out`): message on stderr, stdout stays EMPTY (pure JSON on success paths
   only)
 
+## qa-command.sh
+
+Owns the repo-local QA-command cache `git config driver.qa` (G-24) — the same
+pattern as `detect-forge.sh` owning `driver.forge`. It is purely the cache
+mechanism (read + persist) for the confirmed QA command of a repo, so later
+`/driver` runs in the same repo don't have to ask again; candidate detection
+and the precedence chain (`--qa` flag → cache → state → detect+ask) stay in
+`agents/driver/preplan.md`. The key lives in repo-local git config and is never
+committed. POSIX sh, executable.
+
+### Invocation
+
+```
+qa-command.sh get [--repo DIR]
+qa-command.sh set [--repo DIR] (--command-file FILE | --command "STR")
+qa-command.sh --help
+```
+
+- `get` — print the cached command; `command` is `null` when `driver.qa` is
+  unset (still exit 0)
+- `set` — validate + persist the command with `git config driver.qa "<cmd>"`
+  (single-valued: replaces any previous value)
+- `--repo DIR` — git repo to read/write config in (default: cwd); DIR must
+  itself be a git repo (root or worktree — it must contain a `.git` entry; a
+  plain subdirectory of a repo is rejected because git would resolve the
+  parent's `.git`)
+- `--command STR` — the command to persist; exactly one of `--command` /
+  `--command-file` must be passed
+- `--command-file FILE` — read the command from FILE (the primary input path
+  for agents: command text is written to a file under `.plan/<slug>/`, never
+  passed as argv by callers); at most one trailing newline is trimmed
+- `--help`, `-h` — usage on stdout, exit 0
+
+### Output contract
+
+Exactly one JSON object (one line) on stdout (diagnostics on stderr only):
+
+```json
+{ "command": "<cmd>" | null, "source": "cache" }
+```
+
+for `get` (`"source": "set"` for `set`). `command` is `null` when `driver.qa`
+is unset. JSON is emitted with `printf` + a `json_str` escaper (control chars
+stripped, backslash and double quote escaped) — no jq.
+
+### Validation rules (set)
+
+After trimming at most one trailing newline, the command must be non-empty,
+single-line (no `\n`, `\r`, or any other control char) and at most 4096 chars.
+Any violation → exit 2, empty stdout, and the cache is NOT written. Metachars
+(quotes, `$`, backticks, `&&`, `|`) survive both `git config` storage and the
+JSON escaping byte-identical.
+
+### Exit codes
+
+- `0` — JSON on stdout (`get` with an unset `driver.qa` prints `"command":
+  null` and still exits 0)
+- `2` — error (unknown flag/subcommand, not a git repo, missing/unreadable
+  `--command-file`, both or neither of `--command`/`--command-file`, invalid
+  command): message + usage on stderr, stdout stays EMPTY
+
 ## Tests
 
 ```
@@ -252,7 +313,11 @@ local `http.server` stub on `127.0.0.1`, ephemeral port — no external network:
 rewrite to `attachments/...` links, filename sanitize/dedupe, Content-Type
 extensions, skip-if-exists vs `--refresh`, failed downloads keeping the remote
 URL, `--urls-file` with strings and `{url,title}` objects, single-line JSON
-stdout, exit codes 0/2, `--help`), plus `sh -n` / `py_compile` syntax checks.
+stdout, exit codes 0/2, `--help`), `tests/test-qa-command.sh` (scratch git
+repos in `mktemp -d`: get on fresh/set round-trips incl. metachars, cache
+unset cases, empty/multi-line/CR/oversized command rejection, both/neither
+flag errors, non-repo `--repo`, unknown flags, `--help`, single-JSON-line
+stdout, trailing-newline trimming), plus `sh -n` / `py_compile` syntax checks.
 Exits non-zero on any failure; prints `ok: detect-forge tests` /
 `ok: driver-state tests` / `ok: detect-modules tests` /
-`ok: save-linear-attachments tests` per suite.
+`ok: save-linear-attachments tests` / `ok: qa-command tests` per suite.

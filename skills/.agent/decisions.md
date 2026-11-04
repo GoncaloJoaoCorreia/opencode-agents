@@ -11,3 +11,10 @@
 - Decision: (b) — eager download at fetch time; idempotent resume (skip-if-exists unless `--refresh`); spec.md regenerated from the fresh fetch.
 - Rationale: signed URLs are valid at fetch time, so eager download is reliable; `state.schema.json` allows additional properties and `spec.attachments` was added explicitly, keeping the change additive and schema-compatible.
 - Consequences: `state.spec` gains `spec_file` + `attachments[]` (schema + SKILL.md updated); implement can fall back to fresh MCP `get_attachment`/`extract_images` URLs if a stored signature is stale; `.plan/` remains gitignored scratch.
+
+## 2026-11-04 — G-24 — Additive qa.source field; cache-wins-on-resume pinned in the skill contract
+- Context: the per-repo QA cache needs a machine-readable record of where `state.qa.command` came from, and resume behavior when cache and state disagree had to be pinned in the single source of truth (SKILL.md).
+- Options considered: (a) keep the source implicit (re-derive from git config at read time); (b) add `qa.source` (`flag|cache|state|asked`) to `state.qa`, declared explicitly in `state.schema.json` + SKILL.md §1/§7.3, with the rule that on resume the cache wins and overwrites state (state-only resume backfills the cache).
+- Decision: (b) — additive only; the schema allows additional properties and `qa.source` was declared explicitly, no fields removed.
+- Rationale: state.json is the exchange format between phases; recording the source once per run makes preplan/quality-gate summaries and debugging unambiguous without shelling out to git config.
+- Consequences: older state files without `qa.source` remain valid; when cache and `state.qa.command` disagree on resume the cache wins and overwrites state, and a state-only resume backfills the cache.

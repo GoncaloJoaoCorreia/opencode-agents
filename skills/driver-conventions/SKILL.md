@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, QA-command cache (§7.3), phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -40,6 +40,9 @@ exchange. If you change a format here, update the schemas in `references/` too.
   `preplan`/`plan` may not be skipped (hard error); on resume any phase may be skipped, but
   a skipped phase's outputs must already exist or the next phase that needs them stops with
   an error. `--force` never un-skips.
+- `--qa "cmd"` pins `state.qa.command` and persists it per repo to the repo-local
+  `git config driver.qa` cache (§7.3), so later runs in the same repo reuse it without
+  asking.
 - LIMITATION: the driver requires an interactive client — the driver and preplan use the
   `question` tool, so headless `opencode run` is not supported.
 - After the plan phase, the driver asks the user to approve the plan before implement runs
@@ -79,6 +82,11 @@ Schema: `references/state.schema.json`. Key rules:
 - `audit.fixes[]` / `review.fixes[]` — repair commits the driver spawned via implement in
   fix mode. `audit.fixes[]` entries carry `scope: "task"|"cycle"` + `task_id?`;
   `review.fixes[]` are always cycle-scope: `{ round, commit, finding_ids[] }`.
+- `qa = { command, source: flag|cache|state|asked, candidates?, verdict?, ... }` —
+  `command` is the QA command and `source` records where it came from: `flag`
+  (`--qa "cmd"`), `cache` (repo-local `git config driver.qa` — never committed, §7.3),
+  `state` (kept from a previous run's state on resume), or `asked` (confirmed
+  interactively in preplan).
 - `qa.log` = path to the full log (`.plan/<slug>/qa.log`); `qa.log_excerpt` = short tail
   kept inline; `qa.failures[] = { title, file?, line?, excerpt }`.
 - `report` = path to the final run report (`.plan/<slug>/report.md`), written by the driver
@@ -290,6 +298,24 @@ Both phases use the SAME rule, and `verdict` stays a two-value enum (`pass` | `f
   `skipped`/`failed` with a clear summary; never push anywhere else.
 - Record `state.pr = { number, url, base, head, title, draft, forge, cli }` in `state.json`.
 
+### 7.3 QA command cache (G-24)
+
+- The confirmed QA command is cached repo-locally in `git config driver.qa` (never
+  committed) — the same pattern as `driver.forge` (§7.1). The MECHANISM is the installed
+  `agent-scripts/qa-command.sh` (§8); agents never run `git config driver.qa` inline.
+- Semantics: key `driver.qa`; precedence in preplan step 3: `--qa "cmd"` flag → cache →
+  `state.qa.command` on resume (backfills the cache) → detect candidates + ask. `--qa`
+  and a confirmed answer both persist to the cache; `--force` re-detects, re-asks and
+  updates the cache. The cache wins over a disagreeing `state.qa.command` (state is
+  overwritten via merge). "skip quality-gate" is NOT cached — only real commands are.
+  `state.qa.source` records `flag|cache|state|asked`.
+- The quality-gate phase also falls back to the cache (via the script) when
+  `state.qa.command` is missing, before asking the user.
+- Manual override/clear: `git config driver.qa "<cmd>"` / `git config --unset driver.qa`.
+- Shared across linked worktrees by default, unless the repo sets
+  `extensions.worktreeConfig` (same caveat as `driver.forge` — then `--qa` is the
+  reliable override).
+
 ## 8. Agent scripts (installed payload — the mechanism behind §1 state writes, §2 spec.md/attachments persistence (G-23) and §7.1 forge detection)
 
 `install.sh` ships the repo's `agent-scripts/` directory into the config dir, so every phase
@@ -300,7 +326,8 @@ SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"
 ```
 
 If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/detect-modules.py"` /
-`"$SCRIPTS/driver-state.py"` / `"$SCRIPTS/save-linear-attachments.py"` is missing or not
+`"$SCRIPTS/driver-state.py"` / `"$SCRIPTS/save-linear-attachments.py"` /
+`"$SCRIPTS/qa-command.sh"` is missing or not
 executable, stop with a clear "agent-scripts not installed — re-run install.sh" error.
 Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
 
@@ -381,6 +408,26 @@ Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python
     into `{ url, local?, title?, status: downloaded|skipped|failed, error? }` entries —
     into state via `driver-state.py`, pushing one `state.warnings` entry per failed
     download.
+- **`qa-command.sh`** — owns the repo-local QA-command cache `git config driver.qa`
+  (G-24); §7.3 stays the SEMANTICS (the contract), this script is the MECHANISM.
+  Invocation:
+  `"$SCRIPTS/qa-command.sh" get [--repo DIR]` and
+  `"$SCRIPTS/qa-command.sh" set --repo DIR (--command-file FILE | --command "STR")`
+  - Prints exactly ONE JSON object on stdout:
+    `get: { "command": "<cmd>" | null, "source": "cache" }` and
+    `set: { "command": "<cmd>", "source": "set" }`.
+  - `get` on a repo without the key prints `"command": null` and still exits 0.
+  - `set` validation: after trimming at most one trailing newline the command must be
+    non-empty, single-line (no control characters) and at most 4096 chars; any violation
+    exits 2 with empty stdout and does NOT write the cache. `--command-file` is the
+    primary input path for agents — the command text is written to a file under
+    `.plan/<slug>/` and passed via `--command-file`, never as argv.
+  - `--repo DIR` must itself be a git repo (root or linked worktree with a `.git` entry;
+    a plain subdirectory of a repo is rejected).
+  - Exit codes: `0` = JSON on stdout; `2` = error (unknown flag/subcommand, not a git
+    repo, missing/unreadable `--command-file`, both or neither of
+    `--command`/`--command-file`, invalid command) with a message on stderr and EMPTY
+    stdout. `--help` → usage on stdout, exit 0.
 - **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
   `driver-state.py merge "$statePath" patch.json`,
   `driver-state.py push "$statePath" implement.runs "$entryJson"`,

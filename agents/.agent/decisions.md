@@ -11,3 +11,10 @@
 - Decision: (b).
 - Rationale: `.plan/` is gitignored scratch, so persisting there is free; `state.report` gives the machine-readable pointer; making the plugin action conditional means older runs without report.md simply don't show it.
 - Consequences: SKILL.md §1 + `references/state.schema.json` document `state.report` additively; the file itself is written at cycle end, so the cycle-scope audit verifies the mechanism (driver §7 + schema + SKILL.md + plugin action), not the file, while the cycle is still running.
+
+## 2026-11-04 — G-24 — QA-command precedence: --qa flag > cache > state > detect+ask; --force re-asks
+- Context: on resume the cache (`git config driver.qa`) and a stale `state.qa.command` can disagree; `--force` must be able to re-ask; the "skip quality-gate" choice must not pin future runs.
+- Options considered: (a) state always wins on resume; (b) cache wins over state on resume (state-only resume backfills the cache), `--qa` flag beats the cache, `--force` re-asks and updates the cache, skip never cached; (c) cache the skip choice too.
+- Decision: (b). Review round 1 found R1-F1 (major): the initial implementation ran the cache read unconditionally, so `--force` with a populated cache never re-asked; fixed in `50190349` by gating the preplan cache read on `params.force` NOT set (re-verified fixed in review round 2, verdict pass).
+- Rationale: the cache is the freshest user-confirmed source per repo (mirrors `driver.forge`); `--force` semantically means "re-run even when done", so it must also bypass the cache; not caching the skip keeps quality-gate optional per run.
+- Consequences: `state.qa.source` records where the command came from (`flag|cache|state|asked`); quality-gate's cache fallback only triggers when `state.qa.command` is missing and never overrides a state command.

@@ -19,7 +19,8 @@ Run the project's validation and record the verdict. You run in two scopes: `sco
 right after one task's commit (per-task gate, default on — runs the task's SCOPED `qa.command`
 from the manifest when `params.qa_scope` is `"scoped"`, else the full `state.qa.command`), and
 `scope: "cycle"` once at the end (always the full `state.qa.command`). The command comes from
-`state.qa.command` (detected in preplan, or pinned via the driver's `--qa "cmd"` flag).
+`state.qa.command` (pinned via the driver's `--qa "cmd"` flag, detected/confirmed in preplan,
+or taken from the repo-local `git config driver.qa` cache — see step 2).
 You never edit code — the driver spawns `driver/implement` for repairs in bounded rounds.
 
 ## Inputs (from the driver's prompt)
@@ -40,10 +41,21 @@ You never edit code — the driver spawns `driver/implement` for repairs in boun
      `verdict: "skipped"` (reason: no scoped command declared — the full suite runs at cycle
      scope), set `plan.tasks[<taskId>].qa = "skipped"`, and return — do NOT run the full
      suite per task and do NOT ask; this is not a failure.
-   - If the selected command is `state.qa.command` and it is missing: ask the user via
-     `question` — do not invent a command. If no interactive client is available (question
-     cannot be answered), mark the run `skipped` with summary "no qa.command and no
-     interactive client to ask — skipped" instead of blocking the cycle.
+   - If the selected command is `state.qa.command` and it is missing: first try the
+     repo-local `driver.qa` cache via the installed script. Define
+     `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"` defensively —
+     if `[ ! -x "$SCRIPTS/qa-command.sh" ]`, stop with "agent-scripts not installed —
+     re-run install.sh". Run `"$SCRIPTS/qa-command.sh" get --repo <repoRoot>` (repoRoot
+     from `state.repo_root`, fallback `git rev-parse --show-toplevel`) and capture the
+     single-line JSON stdout into a file under `.plan/<slug>/`; on a non-zero exit,
+     surface the script's stderr and exit code and stop — never swallow them (exit 2 =
+     error, empty stdout). When `command` is non-null, use it and merge
+     `state.qa.command` + `state.qa.source = "cache"` via `driver-state.py` (patch file
+     under `.plan/<slug>/` + `merge` — pass only file paths into commands). Only when
+     the cache is also empty, ask the user via `question` — do not invent a command. If
+     no interactive client is available (question cannot be answered), mark the run
+     `skipped` with summary "no qa.command, no cache entry, and no interactive client
+     to ask — skipped" instead of blocking the cycle.
 3. Run it from the repo root with a generous timeout. Capture exit code and the tail of the
    output. Write the FULL log to `.plan/<slug>/qa.log` (cycle scope) or
    `.plan/<slug>/qa-<taskId>-round-<round>.log` (task scope).

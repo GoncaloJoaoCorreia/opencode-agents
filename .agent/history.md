@@ -7,3 +7,8 @@
 - What changed: repo-root wiring for eager Linear attachment download — `install.sh` ships the new `agent-scripts/save-linear-attachments.py` (payload dirs, manifest, stale-file cleanup), `.github/workflows/release.yml` release self-test covers it, and `README.md` + `AGENTS.md` document the new agent-script and the preplan/plan attachment flow.
 - Commits: `1d6676ae64e4e892a1a21747edcd5537b8a174f1`
 - Plan: `.plan/G-23/plan.md`
+
+## 2026-11-04 — G-24 — Store QA command per repo
+- What changed: repo-root wiring for the per-repo QA-command cache — `install.sh` ships the new `agent-scripts/qa-command.sh` (payload dirs, manifest, stale-file cleanup), `.github/workflows/release.yml` release self-test covers it, and `README.md` + `AGENTS.md` document the repo-local `git config driver.qa` cache and the new agent-script per the §8 mandate.
+- Commits: `cfdd073268a2fda37f09c1cf5bdb248d5b3641bb`
+- Plan: `.plan/G-24/plan.md`
