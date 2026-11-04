@@ -16,7 +16,9 @@ permissions:
 # Phase: quality-gate
 
 Run the project's validation and record the verdict. You run in two scopes: `scope: "task"`
-right after one task's commit (per-task gate, default on — runs the task's SCOPED `qa.command`
+right after one task's commit (per-task gate — skipped without spawning for a single-task
+manifest when the cycle-scope gates run, the driver then records `qa = "skipped"`; otherwise
+it runs the task's SCOPED `qa.command`
 from the manifest when `params.qa_scope` is `"scoped"`, else the full `state.qa.command`), and
 `scope: "cycle"` once at the end (always the full `state.qa.command`). The command comes from
 `state.qa.command` (pinned via the driver's `--qa "cmd"` flag, detected/confirmed in preplan,

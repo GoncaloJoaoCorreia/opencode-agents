@@ -22,3 +22,8 @@
 - What changed: repo-root wiring for the new `agent-context-check.py` agent-script — `install.sh` ships it (payload dirs, manifest, stale-file cleanup), `.github/workflows/release.yml` release self-test covers it, `README.md`/`AGENTS.md` document the write-history restraint guidance and the non-fatal context-length warning.
 - Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
 - Plan: `.plan/G-31/plan.md`
+
+## 2026-11-04 — G-30 — Subtask audit and QA steps - conditional skip
+- What changed: `README.md` driver documentation now states that the per-task spec-audit/quality-gate are skipped for a single-task manifest when the cycle-scope gates run.
+- Commits: `2461233175a0735a0094e0d41f8e7a5ef81fce7b`
+- Plan: `.plan/G-30/plan.md`

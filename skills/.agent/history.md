@@ -17,3 +17,8 @@
 - What changed: `skills/driver-conventions/SKILL.md` §4 encodes the restraint rule for history/decisions entries and §8 gains the `agent-context-check.py` contract (fixed 2,000 estimated-token limit per file, exit 0 with ok:false on over-limit, exit 2 on misuse).
 - Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
 - Plan: `.plan/G-31/plan.md`
+
+## 2026-11-04 — G-30 — Subtask audit and QA steps - conditional skip
+- What changed: `skills/driver-conventions/SKILL.md` §1 per-task-gating contract documents the conditional skip (single-task manifest + cycle gates in the effective run set → verdicts "skipped", no task-scope audit/qa rounds, done on commit); `references/state.schema.json` and `references/manifest.schema.json` descriptions updated additively.
+- Commits: `2461233175a0735a0094e0d41f8e7a5ef81fce7b`
+- Plan: `.plan/G-30/plan.md`

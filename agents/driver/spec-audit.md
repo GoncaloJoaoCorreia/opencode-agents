@@ -17,7 +17,8 @@ permissions:
 
 Compare what was implemented (commit SHAs in `state.plan.tasks`) against the acceptance
 criteria in `manifest.json` / `tasks/*.md`. You run in two scopes: `scope: "task"` right
-after one task's commit (per-task gate, default on), and `scope: "cycle"` once at the end.
+after one task's commit (per-task gate — skipped without spawning for a single-task
+manifest when the cycle-scope gates run), and `scope: "cycle"` once at the end.
 You are REPORT-ONLY: never edit code — the driver spawns `driver/implement` for each repair
 round and re-runs you.
 

@@ -26,7 +26,7 @@
           },
           "qa": {
             "type": "object",
-            "description": "optional scoped QA command run by the per-task quality-gate when params.qa_scope=\"scoped\" (e.g. only this task's test files). Omit when no meaningful scoped command exists — the per-task gate then records qa=skipped and the full state.qa.command runs at cycle scope",
+            "description": "optional scoped QA command run by the per-task quality-gate when params.qa_scope=\"scoped\" (e.g. only this task's test files). Omit when no meaningful scoped command exists — the per-task gate then records qa=skipped and the full state.qa.command runs at cycle scope. For a single-task manifest (when the cycle-scope gates run) the per-task gate is skipped entirely, so the scoped command then only matters for multi-task manifests",
             "required": ["command"],
             "properties": {
               "command": { "type": "string", "description": "exact scoped command the task-scope quality-gate runs from the repo root" },

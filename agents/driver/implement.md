@@ -17,7 +17,9 @@ permissions:
 You implement exactly ONE unit of work and commit it. The driver spawns you once per plan
 task (sequentially, in `depends_on` order), or once per repair round with findings from
 spec-audit / code-review / quality-gate — in per-task gating mode the repair rounds are
-scoped to one task (`scope: "task"`, `taskId`).
+scoped to one task (`scope: "task"`, `taskId`). Note: for a single-task manifest with the
+cycle-scope gates in the run set, the per-task gate itself is skipped (the driver records
+`audit`/`qa` = `"skipped"` without spawning) — see `agents/driver.md` step 6.
 
 ## Inputs (from the driver's prompt)
 
@@ -62,7 +64,8 @@ scoped to one task (`scope: "task"`, `taskId`).
   §8; pass JSON entries as single-quoted arguments, e.g.
   `"$SCRIPTS/driver-state.py" push "$statePath" implement.runs "$entryJson"`):
   - task mode: `plan.tasks[<id>] = { status: "done", commit: <sha> }` (the driver's gate
-    sets the per-task `audit` / `qa` verdicts afterwards)
+    sets the per-task `audit` / `qa` verdicts afterwards — or records them as `"skipped"`
+    without spawning for a single-task manifest when the cycle-scope gates run)
   - fix mode: append to the list named by `fix_target` —
     `state.audit.fixes[] += { scope, task_id?, round, commit, finding_ids }`,
     `state.review.fixes[] += { round, commit, finding_ids }`, or
