@@ -110,8 +110,9 @@ Schema: `references/state.schema.json`. Key rules:
   returning `{ sessionID, directory }` of the current session) and recording the returned ID
   via `driver-state.py set`; `null` when the built-in `opencode` tool is unavailable (older
   OpenCode). Left untouched on resume — it identifies the session that STARTED the run.
-  Used by the driver-viz sidebar plugin for session-scoped run filtering (runs whose
-  `session_id` matches the current session's ID; fallback to most-recent when null/no match).
+  Used by the driver-viz sidebar plugin for strict session-scoped run filtering: only runs
+  whose `session_id` strictly equals the current session's ID are shown — no fallback
+  (unknown session ID, no match, or `session_id: null` hides the sidebar section).
 - **Per-task gating:** the driver's implement fan-out wraps each task before moving to
   the next: `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`)
   with bounded fix rounds → `quality-gate` (`scope: "task"`, `task_id`) with bounded fix

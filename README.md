@@ -205,9 +205,10 @@ phase and the failed task dot already show the progress.
 The sidebar is session-scoped: it shows only runs whose `state.session_id` (recorded by
 the driver at run start) matches the current session's ID, switches immediately to a newly
 started run of this session, and `/driver-viz` (palette: "Driver: show next run") cycles
-only this session's runs. When no run matches — e.g. all runs have `session_id: null` from
-an older driver — the most recently modified run is shown instead. The section hides
-itself in repos without a `.plan/` directory. To
+only this session's runs. The filter is strict — no fallback: when the current session ID
+is unknown, no run matches, runs have `session_id: null` (older drivers), or a run's
+state.json is unparseable, the list is empty and the section is hidden. The section also
+hides itself in repos without a `.plan/` directory. To
 disable the animation, register the plugin with options in `cli.json`:
 `"plugins": [{ "package": "/abs/path/to/.config/opencode/plugins/driver-viz", "options": { "animate": false } }]`.
 

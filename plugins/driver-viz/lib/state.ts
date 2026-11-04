@@ -164,19 +164,19 @@ export function taskCounts(tasks: TaskEntry[] | undefined): {
 }
 
 /**
- * Session-scoped run filtering: when `sessionID` is a non-empty string, return only the runs
- * whose `state.session_id === sessionID`. When that yields an empty list (no run of this
- * session yet, or all runs have `session_id` null/missing — e.g. written by an older
- * driver), or when `sessionID` is null/undefined, return the input unchanged (graceful
- * fallback to the most-recent-run behavior). Pure — never throws.
+ * Session-scoped run filtering, strict (G-32): when `sessionID` is a non-empty string,
+ * return only the runs whose `state.session_id` strictly equals it. There is NO fallback
+ * when nothing matches — an unknown/empty session ID, no run of this session yet, runs
+ * with `session_id` null/missing (e.g. written by an older driver), and unparseable
+ * state.json (state null, mid-write) all yield an empty list, which hides the sidebar
+ * section. Pure — never throws.
  */
 export function filterRunsBySession(
   runs: RunInfo[],
   sessionID: string | null | undefined,
 ): RunInfo[] {
-  if (!sessionID) return runs
-  const matching = runs.filter((r) => r.state?.session_id === sessionID)
-  return matching.length > 0 ? matching : runs
+  if (!sessionID) return []
+  return runs.filter((r) => r.state?.session_id === sessionID)
 }
 
 /** The run to display: the user-selected slug when still present, else the most recent. */

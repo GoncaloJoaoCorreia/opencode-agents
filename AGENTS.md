@@ -94,8 +94,9 @@ implement, PR link in the header. Session-scoped: only runs whose `state.session
 matches the current session's ID (sidebar.content slot input `sessionID`, fallback
 `ui.router.current()`) are shown, a newly started run of this session is switched to
 immediately, and `/driver-viz` (palette "Driver: show next run") cycles only this
-session's runs; when no run matches (e.g. all runs have `session_id: null` from an older
-driver) the most recent run is shown. Hidden when the repo has no `.plan/`.
+session's runs; the filter is strict (no fallback): an unknown session ID, no matching
+run, `session_id: null` runs (older drivers) or an unparseable state.json all hide the
+section. Hidden when the repo has no `.plan/`.
 The sidebar also shows an elapsed-time counter (`⏱`, from the earliest
 `phases.*.started_at`) in the header while a phase is running, a clickable `[Open Plan]`
 on the Plan row once the plan phase is done (plus the palette command "Driver: open
