@@ -12,3 +12,8 @@
 - What changed: repo-root wiring for the per-repo QA-command cache — `install.sh` ships the new `agent-scripts/qa-command.sh` (payload dirs, manifest, stale-file cleanup), `.github/workflows/release.yml` release self-test covers it, and `README.md` + `AGENTS.md` document the repo-local `git config driver.qa` cache and the new agent-script per the §8 mandate.
 - Commits: `cfdd073268a2fda37f09c1cf5bdb248d5b3641bb`
 - Plan: `.plan/G-24/plan.md`
+
+## 2026-11-04 — G-29 — install.sh messaging rework (concise output)
+- What changed: `install.sh` user-facing output condensed — concise success block (version + Components line, no paths/`->` arrows), 2-step Next steps (`.plan/` gitignore hint + `/driver ABC-123`), warn-only user-level Linear MCP check in `check_prereqs`, stale removals tallied into a single line, shortened `--release` progress lines. Task gates green: audit pass (8/8 ACs), QA pass; cycle audit/review/QA all pass.
+- Commits: `69c22dcdc72f7ef9bb51d51ce7e602009b2264b0`
+- Plan: `.plan/G-29/plan.md`
