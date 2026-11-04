@@ -219,6 +219,10 @@ are spawned MANY times inside the implement fan-out — those task-scope spawns 
      `fix_target: "qa"` and `failures: state.qa.failures` instead of `findings`;
   4. re-spawn the phase (next round).
   `code-review` is unchanged (cycle-scope only, `fix_target: "review"`).
+  Fix-mode `driver/implement` spawns self-record an in-progress marker in
+  `implement.runs[]` — the entry is pushed at spawn start with `commit: null` and
+  filled with the commit after the fix lands (see `agents/driver/implement.md`) —
+  which consumers like driver-viz use to show that a repair round is running.
   After MAX_ROUNDS with verdict still `fail`: record it and ask via `question`:
   continue to next phase anyway / abort the cycle.
   Verdict rule (all phases, identical): `fail` iff a blocker/major finding failed;

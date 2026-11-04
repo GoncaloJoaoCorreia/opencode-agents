@@ -192,6 +192,16 @@ done/skipped), a completion block below the chart shows total time, token usage 
 session exposes it, lines changed (`+A -D` from `git diff --numstat` merge-base..HEAD), and
 a clickable `[Open report]` (palette fallback: "Driver: open report") when the driver has
 written `.plan/<slug>/report.md`.
+During a **cycle-scope fix round** (a failed spec-audit / code-review / quality-gate round
+whose repair is being committed by a fix-mode implement spawn), the failed gate phase keeps
+the animated spinner — it is promoted to running while no other phase runs, so the `⏱`
+header keeps ticking — and an extra plugin-only `↻ Fix rN` row appears directly under it:
+braille spinner while the fix runs (static `◐` with `animate: false`), `✓` once the fix has
+landed, hidden again once the gate phase is done. Detection uses the explicit
+`implement.runs[]` marker (`commit: null` while the fix spawn is in progress) with a
+fallback derivation from the `audit`/`review`/`qa` round + fix lists for runs recorded by
+older drivers. Cycle-scope fix rounds only — during task-scope fixes the running Implement
+phase and the failed task dot already show the progress.
 The sidebar is session-scoped: it shows only runs whose `state.session_id` (recorded by
 the driver at run start) matches the current session's ID, switches immediately to a newly
 started run of this session, and `/driver-viz` (palette: "Driver: show next run") cycles

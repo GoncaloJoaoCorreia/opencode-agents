@@ -170,7 +170,7 @@
               "scope": { "enum": ["task", "cycle"], "description": "fix mode only: which gate the repair belongs to" },
               "fix_target": { "enum": ["audit", "review", "qa"], "description": "fix mode only: which state list the fix is recorded under" },
               "round": { "type": "integer" },
-              "commit": { "type": "string", "description": "SHA of the commit this spawn produced" },
+              "commit": { "type": ["string", "null"], "description": "SHA once committed; null while a fix-mode spawn is still in progress (entry pushed at spawn start, filled after the commit)" },
               "summary": { "type": "string" },
               "at": { "type": "string", "format": "date-time" }
             }

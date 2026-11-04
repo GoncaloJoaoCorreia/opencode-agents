@@ -71,7 +71,15 @@ Schema: `references/state.schema.json`. Key rules:
 - `phases.<name> = { status: pending|running|done|failed|skipped, summary, started_at, completed_at }`.
   `skipped` is set by `--skip` (`params.skip[]`) or by preplan's "skip quality-gate" choice.
   This is ONE aggregate entry per phase. Per-spawn records go elsewhere:
-  `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }`.
+  `implement.runs[] = { mode: task|fix, task_id?, round?, commit, summary?, at }` —
+  task-mode entries are pushed once at the end of the spawn with the commit SHA;
+  fix-mode entries are pushed at SPAWN START with `commit: null` (plus `scope`,
+  `fix_target`, `round`, `task_id?`, `at`), and the `commit` + `summary` are filled on
+  that same array entry (numeric-index `set` via `driver-state.py`) after the fix
+  commits — `commit: null` means the fix spawn is still in progress. A null entry
+  whose spawn died stays null: consumers treat it as stale once a later `runs[]`
+  entry carries a commit or the run is completed. Older states have no null-commit
+  entries — readers must tolerate both shapes.
 - `remote = { url, host, forge: github|gitlab|forgejo|unknown, cli: gh|glab|fj|null, source: flag|cache|probe }`
   — filled by preplan (origin remote + detected forge); the pr phase uses it to pick the
   forge CLI. The forge is cached repo-locally in `git config driver.forge` (§7.1).
