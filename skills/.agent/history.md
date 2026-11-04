@@ -7,3 +7,8 @@
 - What changed: `driver-conventions` SKILL.md §1/§2/§8 now document the `spec.spec_file` + `spec.attachments[]` state fields and the `save-linear-attachments.py` invocation contract (single-line JSON stdout, exit 0/2, `--urls-file`, `--help`); `references/state.schema.json` gains `spec.attachments` additively (no fields removed).
 - Commits: `1d6676ae64e4e892a1a21747edcd5537b8a174f1`
 - Plan: `.plan/G-23/plan.md`
+
+## 2026-11-04 — G-24 — Store QA command per repo
+- What changed: `skills/driver-conventions/SKILL.md` gains §7.3 (driver.qa cache semantics: precedence, `--force` re-ask, skip not cached, manual override/clear) and the §8 entry for `qa-command.sh` (get/set, JSON stdout, exit 0/2); `references/state.schema.json` gains `qa.source` (`flag|cache|state|asked`) additively — no fields removed.
+- Commits: `cfdd073268a2fda37f09c1cf5bdb248d5b3641bb`
+- Plan: `.plan/G-24/plan.md`
