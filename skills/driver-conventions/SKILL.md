@@ -1,6 +1,6 @@
 ---
 name: Driver Conventions
-description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, QA-command cache (§7.3), phase-summary contract. Load this FIRST in every driver phase."
+description: "Contracts shared by all driver phases (the `driver` orchestrator and `driver/*` subagents, /driver and /phases/* commands) — state.json schema, plan manifest schema, commit message format, history/decisions file format, slug/branch/worktree policy, Linear usage, installed agent scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh, agent-context-check.py — §8), forge detection (gh/glab/forgejo-cli) + PR/MR conventions, QA-command cache (§7.3), phase-summary contract. Load this FIRST in every driver phase."
 ---
 
 # Driver conventions
@@ -185,6 +185,10 @@ Refs: <ISSUE-ID>
   entries avoid implementation details unless they matter for the history itself.
   Append nothing when nothing is worth recording this cycle — appending nothing is a
   valid outcome, for `history.md` and `decisions.md` alike.
+- Context limit (G-31): every `.agent/history.md` / `.agent/decisions.md` is checked
+  against a fixed 2,000 estimated tokens per file (`ceil(bytes/4)`) by the installed
+  `agent-scripts/agent-context-check.py` (§8). write-history pushes one
+  `state.warnings[]` entry per over-limit file — flagged, never fatal.
 - Repo-root-level changes (commits whose changed files are all at the repo root) go to
   the repo-root `.agent/history.md` / `.agent/decisions.md`.
 - Module mapping (G-22): run the INSTALLED `agent-scripts/detect-modules.py` (§8) —
@@ -333,6 +337,9 @@ If `"$SCRIPTS/detect-forge.sh"` / `"$SCRIPTS/detect-modules.py"` /
 `"$SCRIPTS/driver-state.py"` / `"$SCRIPTS/save-linear-attachments.py"` /
 `"$SCRIPTS/qa-command.sh"` is missing or not
 executable, stop with a clear "agent-scripts not installed — re-run install.sh" error.
+Documented exception: a missing `"$SCRIPTS/agent-context-check.py"` (old install) is NOT
+a hard stop for write-history — it pushes a `state.warnings` entry ("re-run install.sh")
+and continues, because the context-length warning must never break a cycle.
 Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python3/git.
 
 - **`detect-forge.sh`** — forge detection. §7.1 stays the SEMANTICS (the contract); this
@@ -432,6 +439,25 @@ Prerequisites: POSIX sh, git, python3 — `install.sh` hard-fails without python
     repo, missing/unreadable `--command-file`, both or neither of
     `--command`/`--command-file`, invalid command) with a message on stderr and EMPTY
     stdout. `--help` → usage on stdout, exit 0.
+- **`agent-context-check.py`** — context-length check over ALL
+  `.agent/{history,decisions}.md` files of a target repo (G-31); the MECHANISM behind
+  the §4 context limit (write-history calls it after its docs commit and warns via
+  `state.warnings[]` — over-limit is never fatal). python3 stdlib only, read-only,
+  idempotent. Invocation:
+  `"$SCRIPTS/agent-context-check.py" [--repo DIR]`
+  - Scans every `.agent/history.md` and `.agent/decisions.md` at any depth (default
+    repo: cwd), pruning `.git/`, `.plan/`, every other hidden dir (except `.agent`
+    itself), `node_modules/` and `__pycache__/`; an unreadable individual file is
+    skipped with a stderr note and does not affect `ok`.
+  - Prints exactly ONE JSON object (one line) on stdout:
+    `{ "repo": "/abs/repo", "limit_tokens": 2000, "files": [ { "path", "lines", "bytes", "tokens_est", "over_limit" } ], "over_limit": [...], "ok": bool }`
+    — `files` sorted by repo-relative `path`; `tokens_est` = `ceil(bytes/4)`; a file
+    is over the limit when `tokens_est > 2000` (exactly 2000 is NOT over); the limit
+    is a fixed constant reported as `limit_tokens` — no override flag; `over_limit`
+    = the subset of `files` with `over_limit: true`; `ok` = no file over the limit.
+  - Exit codes: `0` = JSON on stdout — also when over-limit (over-limit is data,
+    `"ok": false`, never an error); `2` = misuse / unknown flag / unreadable `--repo`
+    (message + usage on stderr, EMPTY stdout). `--help` → usage on stdout, exit 0.
 - **Mandate:** ALL `state.json` updates in EVERY phase go through these subcommands, e.g.
   `driver-state.py merge "$statePath" patch.json`,
   `driver-state.py push "$statePath" implement.runs "$entryJson"`,

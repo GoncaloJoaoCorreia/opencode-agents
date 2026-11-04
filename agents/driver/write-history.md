@@ -68,12 +68,36 @@ Module dirs come from the INSTALLED agent script
    `history.entries[] = [{ module, agent_dir, history_file, decision_file, commit }]`
    (`history_file` = `<agent_dir>/.agent/history.md`, `agent_dir` = module dir, `"."`
    for the repo root), and record the docs commit SHA.
+6. Context-length check (non-fatal, G-31): run the INSTALLED
+   `"$SCRIPTS/agent-context-check.py" --repo <repoRoot>` and capture its single-line
+   JSON stdout into a file under `.plan/<slug>/` (e.g. `context-check.json`).
+   - If the script is missing or not executable (old install) → push ONE
+     `state.warnings` entry via `"$SCRIPTS/driver-state.py" push "$statePath" warnings '<json>'`
+     ("agent-context-check.py not in installed agent-scripts — context-length check
+     skipped; re-run install.sh") and continue. This is the ONE script where a missing
+     install degrades to a warning + continue instead of the §8 hard-stop, because the
+     warning must never break a cycle (`driver-state.py` / `detect-modules.py` keep the
+     hard-stop).
+   - Otherwise extract `over_limit` with python3 (never jq) and, for each over-limit
+     path, write the warning-entry JSON to its own file under `.plan/<slug>/` and push
+     it with `"$SCRIPTS/driver-state.py" push "$statePath" warnings "$(cat <entry-file>)"`
+     — never interpolate the file names into a shell command. Each entry names the
+     repo-relative path and its estimated tokens over the 2,000 limit.
+   - Name the over-limit paths in the phase summary. The check NEVER fails the phase
+     and NEVER blocks the docs commit: over-limit is data (the script exits 0 with
+     `"ok": false`; exit 2 means misuse/unreadable repo — surface its stderr but still
+     continue).
 
 ## Output contract (to the driver)
 
-Short summary: module `.agent/` files touched + docs commit SHA (or "nothing to commit").
+Short summary: module `.agent/` files touched + docs commit SHA (or "nothing to commit"),
+plus any over-limit `.agent` paths flagged by `agent-context-check.py` (from
+`state.warnings`).
 
 ## Gotchas
 
+- Slug guard: build `.plan/<slug>/` paths only after validating the slug against
+  `^[A-Z][A-Z0-9]*-[0-9]+$` (driver-conventions §0) — never interpolate an unvalidated
+  slug into a path or shell command.
 - If `git commit` fails (e.g. nothing staged), do not force it — report and leave changes uncommitted.
 - Never stage files outside `.agent/`.

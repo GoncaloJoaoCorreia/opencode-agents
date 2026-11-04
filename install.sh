@@ -23,8 +23,8 @@
 # plugins/driver-viz is
 # auto-discovered by OpenCode from <config>/plugins/driver-viz/ — no cli.json edit
 # needed. agent-scripts/ holds the driver helper scripts (detect-forge.sh,
-# detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh) that
-# the driver agents call from <config>/agent-scripts/.
+# detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh,
+# agent-context-check.py) that the driver agents call from <config>/agent-scripts/.
 #
 # Prerequisites (checked before anything is installed, in both modes): POSIX sh, git
 # and python3 are REQUIRED (the installed agent-scripts/ need them) — the install

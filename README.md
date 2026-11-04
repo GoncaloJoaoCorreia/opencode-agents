@@ -59,7 +59,7 @@ Re-run it after pulling changes.
   `.agent/history` / `.agent/decisions` as agents. The release tarball and the installer
   both strip them; re-running the installer also removes previously installed copies.
 - **Driver helper scripts.** `agent-scripts/` installs to
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the five scripts
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the six scripts
   the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
   mirroring `skills/driver-conventions/SKILL.md` §7.1), `detect-modules.py` (module
   detection + file→module mapping for the write-history phase, §4/§8), `driver-state.py`
@@ -67,7 +67,10 @@ Re-run it after pulling changes.
   `save-linear-attachments.py` (eager download of a Linear issue's attachments at
   spec-fetch time — preplan/plan persist `.plan/<slug>/spec.md` with local links, G-23)
   and `qa-command.sh` (the repo-local QA-command cache `git config driver.qa`, §7.3 —
-  G-24). See `agent-scripts/README.md` in this repo for their contracts.
+  G-24) and `agent-context-check.py` (context-length check over all
+  `.agent/{history,decisions}.md` files — write-history flags over-long files via
+  `state.warnings`, §4/§8 — G-31). See `agent-scripts/README.md` in this repo for their
+  contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -131,7 +134,7 @@ flowchart TD
 | spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
 | quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
-| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them — only what is worth future reference; nothing is appended when nothing meaningful happened |
+| write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them — only what is worth future reference; nothing is appended when nothing meaningful happened; over-long `.agent` files are flagged as `state.warnings` via `agent-context-check.py` (never fatal) |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
 Per-task gating: right after each task's commit
