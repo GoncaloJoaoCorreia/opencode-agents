@@ -71,14 +71,7 @@ Module dirs come from the INSTALLED agent script
 6. Context-length check (non-fatal, G-31): run the INSTALLED
    `"$SCRIPTS/agent-context-check.py" --repo <repoRoot>` and capture its single-line
    JSON stdout into a file under `.plan/<slug>/` (e.g. `context-check.json`).
-   - If the script is missing or not executable (old install) → push ONE
-     `state.warnings` entry via `"$SCRIPTS/driver-state.py" push "$statePath" warnings '<json>'`
-     ("agent-context-check.py not in installed agent-scripts — context-length check
-     skipped; re-run install.sh") and continue. This is the ONE script where a missing
-     install degrades to a warning + continue instead of the §8 hard-stop, because the
-     warning must never break a cycle (`driver-state.py` / `detect-modules.py` keep the
-     hard-stop).
-   - Otherwise extract `over_limit` with python3 (never jq) and, for each over-limit
+   - Extract `over_limit` with python3 (never jq) and, for each over-limit
      path, write the warning-entry JSON to its own file under `.plan/<slug>/` and push
      it with `"$SCRIPTS/driver-state.py" push "$statePath" warnings "$(cat <entry-file>)"`
      — never interpolate the file names into a shell command. Each entry names the
