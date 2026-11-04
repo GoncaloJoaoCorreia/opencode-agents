@@ -62,8 +62,9 @@ agent-scripts/              # shipped helper scripts the driver agents call from
                             #   (detect-forge.sh = forge detection, detect-modules.py = module detection,
                             #    driver-state.py = atomic state.json access, save-linear-attachments.py =
                             #    eager Linear attachment download (G-23), qa-command.sh = repo-local
-                            #    QA-command cache driver.qa (G-24); tests in agent-scripts/tests/,
-                            #    gated by scripts/validate.sh)
+                            #    QA-command cache driver.qa (G-24), agent-context-check.py = .agent
+                            #    context-length check over history/decisions.md (G-31);
+                            #    tests in agent-scripts/tests/, gated by scripts/validate.sh)
 snippets/                   # opencode.jsonc bits + .gitignore snippet (.plan/) for target repos
 docs/                       # repo-only docs (NOT in the release payload): driver-viz-sidebar.png = the README screenshot
 plugins/driver-viz/         # TUI-only plugin: animated sidebar flow chart of the current run

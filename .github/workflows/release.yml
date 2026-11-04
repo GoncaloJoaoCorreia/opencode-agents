@@ -175,6 +175,7 @@ jobs:
           test -f "$t/cfg/agent-scripts/detect-modules.py"
           test -f "$t/cfg/agent-scripts/save-linear-attachments.py"
           test -f "$t/cfg/agent-scripts/qa-command.sh"
+          test -f "$t/cfg/agent-scripts/agent-context-check.py"
           test -f "$t/cfg/opencode-agents.manifest"
           # the payload must not carry .agent/ or __pycache__/ (they would be
           # discovered as agents / are bytecode junk)

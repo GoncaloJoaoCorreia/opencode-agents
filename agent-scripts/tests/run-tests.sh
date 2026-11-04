@@ -19,6 +19,8 @@ python3 -m py_compile "$ROOT/detect-modules.py"
 echo "ok: py_compile detect-modules.py"
 python3 -m py_compile "$ROOT/save-linear-attachments.py"
 echo "ok: py_compile save-linear-attachments.py"
+python3 -m py_compile "$ROOT/agent-context-check.py"
+echo "ok: py_compile agent-context-check.py"
 sh -n "$ROOT/qa-command.sh"
 echo "ok: sh -n qa-command.sh"
 
@@ -41,5 +43,9 @@ echo "ok: save-linear-attachments tests"
 echo "== qa-command tests =="
 sh "$HERE/test-qa-command.sh"
 echo "ok: qa-command tests"
+
+echo "== agent-context-check tests =="
+python3 "$HERE/test-agent-context-check.py"
+echo "ok: agent-context-check tests"
 
 echo "== all agent-scripts tests passed =="

@@ -12,3 +12,8 @@
 - What changed: wired the repo-local `driver.qa` cache into the phase prompts — `agents/driver/preplan.md` step 3 implements the precedence `--qa` flag → cache → `state.qa.command` → detect+ask (persisting flag/confirmed answers via `qa-command.sh set --command-file`, `--force` re-asks, "skip quality-gate" not cached) and `agents/driver/quality-gate.md` falls back to the cache when `state.qa.command` is missing; `agents/driver.md` updated. Review fix R1-F1: the cache read in preplan case 2 is now gated on `params.force` NOT set, so `--force` falls through to detect+ask and updates the cache.
 - Commits: `cfdd073268a2fda37f09c1cf5bdb248d5b3641bb`, `50190349ffeb9682f7551373df3402cbf34d5b0f`
 - Plan: `.plan/G-24/plan.md`
+
+## 2026-11-04 — G-31 — Optimisation - History/Decisions records
+- What changed: `agents/driver/write-history.md` now records only what is worth future reference in history.md (rationales belong in decisions.md only; appending nothing is valid) and runs the installed `agent-context-check.py`, pushing one `state.warnings` entry per over-limit `.agent` file (never fatal); `agents/driver.md` registry row mirrors both.
+- Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
+- Plan: `.plan/G-31/plan.md`
