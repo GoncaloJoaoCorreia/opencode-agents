@@ -23,8 +23,8 @@
 # plugins/driver-viz is
 # auto-discovered by OpenCode from <config>/plugins/driver-viz/ — no cli.json edit
 # needed. agent-scripts/ holds the driver helper scripts (detect-forge.sh,
-# detect-modules.py, driver-state.py, save-linear-attachments.py) that the driver
-# agents call from <config>/agent-scripts/.
+# detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh) that
+# the driver agents call from <config>/agent-scripts/.
 #
 # Prerequisites (checked before anything is installed, in both modes): POSIX sh, git
 # and python3 are REQUIRED (the installed agent-scripts/ need them) — the install
@@ -217,7 +217,7 @@ install_payload() {
   printf '%s\n' "$version" > "$DEST/opencode-agents.version"
   echo "installed opencode-agents $version -> $DEST"
   if [ "$want_scripts" = "1" ]; then
-    echo "agent-scripts -> $DEST/agent-scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py — called by the driver agents)"
+    echo "agent-scripts -> $DEST/agent-scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh — called by the driver agents)"
   fi
   if [ "$want_plugins" = "1" ]; then
     echo "driver-viz TUI plugin -> $DEST/plugins/driver-viz (auto-discovered; /driver-viz cycles runs)"
@@ -283,5 +283,5 @@ echo "  2. Add '.plan/' to the .gitignore of every repo you run the driver in (s
 echo "  3. Pick a model/variant with /models — all driver phases inherit the session model"
 echo "  4. The driver-viz sidebar plugin (installed under plugins/, unless --no-plugin) shows the"
 echo "     live phase flow chart of the current /driver run in the TUI sidebar"
-echo "  5. Driver helper scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py) are installed under"
+echo "  5. Driver helper scripts (detect-forge.sh, detect-modules.py, driver-state.py, save-linear-attachments.py, qa-command.sh) are installed under"
 echo "     \${XDG_CONFIG_HOME:-~/.config}/opencode/agent-scripts/ — the driver agents call them from there"

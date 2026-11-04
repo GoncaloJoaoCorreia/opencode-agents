@@ -84,7 +84,7 @@
         },
         "worktree": { "type": "boolean" },
         "max_rounds": { "type": "integer", "minimum": 1, "default": 2 },
-        "qa": { "type": "string", "description": "--qa override for state.qa.command" },
+        "qa": { "type": "string", "description": "--qa override for state.qa.command; persisted per repo to `git config driver.qa` (see SKILL.md §7.3)" },
         "qa_scope": {
           "enum": ["scoped", "full"],
           "default": "scoped",
@@ -250,7 +250,8 @@
     "qa": {
       "type": "object",
       "properties": {
-        "command": { "type": "string" },
+        "command": { "type": "string", "description": "the QA command — from --qa, the repo-local driver.qa cache, state, or a confirmed answer (see source; SKILL.md §7.3)" },
+        "source": { "enum": ["flag", "cache", "state", "asked"], "description": "where command came from: flag = --qa \"cmd\"; cache = repo-local git config driver.qa (never committed, §7.3); state = kept from a previous run's state on resume; asked = confirmed interactively in preplan" },
         "candidates": { "type": "array", "items": { "type": "string" } },
         "verdict": { "enum": ["pass", "fail", "skipped"] },
         "exit_code": { "type": "integer" },

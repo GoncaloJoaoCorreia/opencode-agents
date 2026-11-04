@@ -66,8 +66,10 @@ dirty-file list. Grammar:
 - `--worktree`: run the whole cycle inside a NEW git worktree.
 - `--max-rounds N`: cap for the repair-round loops (per gate: each per-task audit/qa gate
   AND each cycle-scope phase; default 2).
-- `--qa "cmd"`: pin the QA command — preplan stores it in `state.qa.command` without
-  detecting/asking.
+- `--qa "cmd"`: pin the QA command — preplan stores it in `state.qa.command`
+  (`state.qa.source = "flag"`) without detecting/asking, and persists it to the
+  repo-local `git config driver.qa` cache (like `--forge` persists to `driver.forge`)
+  so later runs in the same repo reuse it without asking — see driver-conventions §7.3.
 - `--qa-scope scoped|full`: set `params.qa_scope` (default `"scoped"`). Per-task quality-gate
   runs the task's manifest `qa.command` ("scoped"; skipped when the task declares none) or
   the full `state.qa.command` ("full"). The cycle-scope run ALWAYS uses `state.qa.command`.
@@ -143,7 +145,7 @@ If it exists, `merge` a patch — never clobber.
 
 | # | phase         | agent ID               | notes                                                       |
 |---|---------------|------------------------|-------------------------------------------------------------|
-| 1 | preplan       | `driver/preplan`       | fills spec (Linear/prompt/file), qa.command, warnings       |
+| 1 | preplan       | `driver/preplan`       | fills spec (Linear/prompt/file), qa.command + qa.source (flag|cache|state|asked), warnings |
 | 2 | plan          | `driver/plan`          | writes plan.md + manifest.json + tasks/*.md                 |
 | 3 | implement     | `driver/implement`     | YOU fan out once per manifest task, sequentially; with per-task gating (default) each task is wrapped in a scope=task spec-audit + quality-gate before the next |
 | 4 | spec-audit    | `driver/spec-audit`    | report-only; spawned per task (scope=task) in the fan-out AND once at cycle scope (scope=cycle); YOU run bounded repair rounds per gate |

@@ -12,3 +12,6 @@ In the full cycle the driver spawns this phase once per task (`scope=task`, `tas
 scoped per-task `qa.command` unless `params.qa_scope=full`) inside the implement fan-out, and
 once at the end (`scope=cycle`, always the full `state.qa.command`). Standalone, pass the same
 inputs, e.g.: `/phases/quality-gate ABC-123 scope=cycle round=1`.
+
+When `state.qa.command` is missing, the phase first falls back to the repo-local
+`git config driver.qa` cache (installed `agent-scripts/qa-command.sh`) before asking.

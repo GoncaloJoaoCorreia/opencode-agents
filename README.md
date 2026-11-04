@@ -59,14 +59,15 @@ Re-run it after pulling changes.
   `.agent/history` / `.agent/decisions` as agents. The release tarball and the installer
   both strip them; re-running the installer also removes previously installed copies.
 - **Driver helper scripts.** `agent-scripts/` installs to
-  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the four scripts
+  `${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts/` and holds the five scripts
   the driver agents call from there: `detect-forge.sh` (forge detection for the `pr` phase,
   mirroring `skills/driver-conventions/SKILL.md` §7.1), `detect-modules.py` (module
   detection + file→module mapping for the write-history phase, §4/§8), `driver-state.py`
-  (atomic, merge-never-clobber access to `.plan/<slug>/state.json`) and
+  (atomic, merge-never-clobber access to `.plan/<slug>/state.json`),
   `save-linear-attachments.py` (eager download of a Linear issue's attachments at
-  spec-fetch time — preplan/plan persist `.plan/<slug>/spec.md` with local links, G-23).
-  See `agent-scripts/README.md` in this repo for their contracts.
+  spec-fetch time — preplan/plan persist `.plan/<slug>/spec.md` with local links, G-23)
+  and `qa-command.sh` (the repo-local QA-command cache `git config driver.qa`, §7.3 —
+  G-24). See `agent-scripts/README.md` in this repo for their contracts.
 - **Copy-based on purpose** (OpenCode's discovery skips symlinked agent files) — don't
   symlink the directories yourself; see [AGENTS.md](AGENTS.md) for details.
 - Releases are cut with the manual **Release** workflow on GitHub (semver tag
@@ -124,7 +125,7 @@ flowchart TD
 
 | Phase | Run standalone | What happens |
 |---|---|---|
-| preplan | `/phases/preplan` | Fetches the Linear issue (or takes a pasted/file spec), picks the QA command, checks the repo setup, writes `.plan/<slug>/state.json` |
+| preplan | `/phases/preplan` | Fetches the Linear issue (or takes a pasted/file spec), picks the QA command (cached per repo in `git config driver.qa` after the first confirmation), checks the repo setup, writes `.plan/<slug>/state.json` |
 | plan | `/phases/plan` | Explores the code and writes `.plan/<slug>/plan.md` + `manifest.json` + `tasks/*.md` — you get asked to approve the plan before anything is built |
 | implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope); each commit is then gated per task (below) |
 | spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
@@ -220,7 +221,7 @@ disable the animation, register the plugin with options in `cli.json`:
 | `--skip a,b,...` | Skip these phases — marked `skipped`, never run (incl. their per-task gates). Mutually exclusive with `--phases`; on a fresh run `preplan`/`plan` cannot be skipped |
 | `--worktree` | Run the cycle in a new git worktree named after the slug |
 | `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
-| `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you) |
+| `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you); the command is persisted per repo in `git config driver.qa` and reused on later runs — override with `git config driver.qa "..."` |
 | `--qa-scope scoped\|full` | Per-task quality-gate source: the task's scoped `qa.command` (default) or the full QA command; the cycle-scope run always uses the full command |
 | `--force` | Re-run the requested phases even if marked done |
 | `--draft` | Open the PR/MR as a draft (`pr` phase) |

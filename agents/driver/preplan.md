@@ -99,18 +99,46 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
    when set, else all phases MINUS `params.skip`; with `--skip quality-gate` there is
    nothing to detect, so skip this step entirely and leave `phases["quality-gate"].status`
    = `"skipped"` for the driver):
-   - If `params.qa` is set (driver `--qa "cmd"`): use it directly — `state.qa.command = params.qa`,
-     skip detection and the question.
-   - Else if `state.qa.command` already exists (resume) and `params.force` is NOT set: keep the
-     stored command — skip detection and the question. Only re-ask when forced or when missing.
-   - Else detect candidates read-only: `package.json` scripts (`test`, `check`, `lint`,
-     `typecheck`), `Makefile` (`test`/`check` targets), CI test steps in
-     `.github/workflows/*.yml`, `.gitlab-ci.yml`, `.forgejo/workflows/*.yml` and
-     `.gitea/workflows/*.yml`.
-   - Ask via `question` to confirm: options = detected candidates + "skip quality-gate" + free-form.
-     Store the choice in `state.qa.command` (and `state.qa.candidates`). Choosing
-     "skip quality-gate" also sets `phases["quality-gate"].status = "skipped"` immediately,
-     so the driver does not have to infer it.
+   The repo-local cache `git config driver.qa` is owned by the installed
+   `agent-scripts/qa-command.sh` (driver-conventions §7.3 semantics, §8 mechanism) —
+   define the scripts dir defensively and fail clearly when missing, exactly like step 4
+   does for detect-forge.sh:
+   `SCRIPTS="${XDG_CONFIG_HOME:-$HOME/.config}/opencode/agent-scripts"` — if
+   `[ ! -x "$SCRIPTS/qa-command.sh" ]`, stop with "agent-scripts not installed — re-run
+   install.sh". Precedence (first match wins):
+   1. `params.qa` set (driver `--qa "cmd"`): `state.qa.command = params.qa`,
+      `state.qa.source = "flag"`, and persist to the cache — write the command to
+      `$planDir/qa-command.txt` with the edit tool, then run
+      `"$SCRIPTS/qa-command.sh" set --repo "$repoRoot" --command-file "$planDir/qa-command.txt"`
+      (the command text never travels via argv). Skip detection and the question.
+   2. Else run `"$SCRIPTS/qa-command.sh" get --repo "$repoRoot"` and capture the
+      single-line JSON stdout (`{ "command": ...|null, "source": "cache" }`) into
+      `$planDir/qa-cache.json`. On a non-zero exit, surface the script's stderr and exit
+      code to the driver and stop — never swallow them (exit 0 with `"command": null` is
+      a valid result; exit 2 is an error with empty stdout). When `command` is non-null:
+      `state.qa.command = <cached>`, `state.qa.source = "cache"`, skip the question. Merge
+      into state via `driver-state.py` (§8): build `$planDir/qa.patch.json` from the
+      captured file with a short python3-stdlib snippet that passes only FILE PATHS as
+      arguments (never the JSON content) and emits
+      `{ "qa": { "command": ..., "source": "cache" } }`, then
+      `"$SCRIPTS/driver-state.py" merge "$statePath" "$planDir/qa.patch.json"`.
+   3. Else if `state.qa.command` already exists (resume) and `params.force` is NOT set:
+      keep the stored command, `state.qa.source = "state"`, and backfill the cache —
+      write the stored command to `$planDir/qa-command.txt` with the edit tool and run
+      `set --repo "$repoRoot" --command-file "$planDir/qa-command.txt"` as in (1).
+   4. Else (`params.force`, or nothing stored anywhere): detect candidates read-only
+      (unchanged: `package.json` scripts (`test`, `check`, `lint`, `typecheck`),
+      `Makefile` (`test`/`check` targets), CI test steps in `.github/workflows/*.yml`,
+      `.gitlab-ci.yml`, `.forgejo/workflows/*.yml` and `.gitea/workflows/*.yml`) and ask
+      via `question` to confirm: options = detected candidates + "skip quality-gate" +
+      free-form. Store the choice in `state.qa.command` (and `state.qa.candidates`),
+      `state.qa.source = "asked"`, and persist a real command to the cache via
+      `set --command-file` (write the answer to `$planDir/qa-command.txt` first).
+      Choosing "skip quality-gate" still sets `phases["quality-gate"].status = "skipped"`
+      immediately and writes NO cache entry (a confirmed decision — only real commands
+      are cached).
+   All `state.qa.*` writes go through `driver-state.py` (`merge` with a patch file under
+   `.plan/<slug>/`, or `set`) — never clobber.
 4. **Forge detection + cache** (fills `state.remote`; the pr phase consumes it).
    Semantics: driver-conventions §7.1 — the MECHANISM is the installed script
    `agent-scripts/detect-forge.sh` (driver-conventions §8); do NOT re-implement the
@@ -156,8 +184,9 @@ Your job: fill in the spec, the QA command, and warnings — then mark preplan d
 
 ## Output contract (to the driver)
 
-Return a SHORT summary only: slug, spec source, qa command (or "skipped"), detected forge
-+ cli + source (flag/cache/probe), warnings.
+Return a SHORT summary only: slug, spec source, qa command + its source
+(flag|cache|state|asked, or "skipped"), detected forge + cli + source (flag/cache/probe),
+warnings.
 Do NOT paste the spec or issue body into your reply.
 
 ## Gotchas
