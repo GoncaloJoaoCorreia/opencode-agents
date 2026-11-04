@@ -6,6 +6,10 @@ subagent: true
 
 Run the implement phase.
 
+In the full cycle the driver wraps each task in the per-task gates — skipped without
+spawning for a single-task manifest when the cycle-scope spec-audit + quality-gate run
+(the verdicts are then recorded as `skipped`).
+
 Arguments: $ARGUMENTS
 
 Task mode: `/phases/implement ABC-123 mode=task taskId=<id>` (one plan task, one commit).

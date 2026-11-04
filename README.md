@@ -130,10 +130,10 @@ flowchart TD
 |---|---|---|
 | preplan | `/phases/preplan` | Fetches the Linear issue (or takes a pasted/file spec), picks the QA command (cached per repo in `git config driver.qa` after the first confirmation), checks the repo setup, writes `.plan/<slug>/state.json` |
 | plan | `/phases/plan` | Explores the code and writes `.plan/<slug>/plan.md` + `manifest.json` + `tasks/*.md` — you get asked to approve the plan before anything is built |
-| implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope); each commit is then gated per task (below) |
-| spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there) |
+| implement | `/phases/implement` | One plan task per commit, in dependency order (`feat`/`fix`/… with module scope); each commit is then gated per task (below; skipped for a single-task manifest when the cycle-scope gates run) |
+| spec-audit | `/phases/spec-audit` | Verifies acceptance criteria against the actual code/commits (runs the plan's verification commands) — once per task right after its commit (`scope=task`), and once over everything at the end (`scope=cycle`; criteria marked `scope: "cycle"` in the manifest are checked there). Per-task spawns are skipped for a single-task manifest when the cycle-scope gates run (verdict recorded as `skipped`) |
 | code-review | `/phases/code-review` | Reviews the cycle's commits, findings prioritized blocker → nit |
-| quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds |
+| quality-gate | `/phases/quality-gate` | Runs QA and records the verdict — per task the task's scoped `qa.command` from the manifest (skipped when the task declares none; `--qa-scope full` runs the full command per task), and once at cycle end the full `state.qa.command`; failures feed back into repair rounds. Per-task runs are skipped for a single-task manifest when the cycle-scope gates run (verdict recorded as `skipped`) |
 | write-history | `/phases/write-history` | Appends `<module>/.agent/history.md` + `decisions.md` (repo-root `.agent/` for root-level files) and commits them — only what is worth future reference; nothing is appended when nothing meaningful happened; over-long `.agent` files are flagged as `state.warnings` via `agent-context-check.py` (never fatal) |
 | pr | `/phases/pr` | Pushes the branch and opens/updates a PR/MR against the repo's default branch via the forge CLI (`gh` / `glab` / `forgejo-cli`), with a short, review-focused description that follows the repo's PR/MR template when one exists |
 
@@ -141,7 +141,10 @@ Per-task gating: right after each task's commit
 the driver runs spec-audit (`scope=task`) and quality-gate (`scope=task`) for that task,
 each with bounded repair rounds — so every commit on the branch is already audited and gated
 before the next task builds on it, and a task counts as done only when its commit passed both
-gates. After all tasks, spec-audit and quality-gate run once more at cycle scope (quality-gate
+gates. For a single-task manifest where the cycle-scope spec-audit + quality-gate are in the
+run set, the per-task gates are skipped entirely — the verdicts are recorded as `skipped`
+without spawning, since the cycle-scope runs already cover the only task. After all tasks,
+spec-audit and quality-gate run once more at cycle scope (quality-gate
 then always runs the full QA command) to catch cross-task integration issues; code-review
 always reviews the whole cycle.
 
@@ -221,7 +224,7 @@ disable the animation, register the plugin with options in `cli.json`:
 | Flag | Effect |
 |---|---|
 | `--phases a,b,...` | Run only these phases (default: all) |
-| `--skip a,b,...` | Skip these phases — marked `skipped`, never run (incl. their per-task gates). Mutually exclusive with `--phases`; on a fresh run `preplan`/`plan` cannot be skipped |
+| `--skip a,b,...` | Skip these phases — marked `skipped`, never run (incl. their per-task gates). Mutually exclusive with `--phases`; on a fresh run `preplan`/`plan` cannot be skipped. Independently, a single-task manifest with the cycle-scope gates in the run set also skips the per-task gates |
 | `--worktree` | Run the cycle in a new git worktree named after the slug |
 | `--max-rounds N` | Max audit/review/qa repair rounds (default 2) |
 | `--qa "cmd"` | QA command override (otherwise auto-detected and confirmed with you); the command is persisted per repo in `git config driver.qa` and reused on later runs — override with `git config driver.qa "..."` |
@@ -237,7 +240,7 @@ disable the animation, register the plugin with options in `cli.json`:
   spec — also written for Linear issues, with downloaded attachments rewritten to local
   links), `attachments/` (eagerly downloaded Linear issue attachments), `plan.md`,
   `manifest.json`, `tasks/*.md`, `qa.log`, `audit-round-<n>.md` (audit evidence),
-  `pr-body.md` (PR description draft), plus per-task gate artifacts `audit-<task>-round-<n>.md` and `qa-<task>-round-<n>.log`.
+  `pr-body.md` (PR description draft), plus per-task gate artifacts `audit-<task>-round-<n>.md` and `qa-<task>-round-<n>.log` (not written when the per-task gate is skipped for a single-task manifest — the verdicts are then recorded as `skipped` in `state.json`).
 - **Commits** — one per plan task, conventional format with the module as scope
   (`feat(auth): ...`) plus `Driver-Task:` / `Refs:` trailers. No phase pushes — except the
 final `pr` phase, which pushes the branch and opens the PR.

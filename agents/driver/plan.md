@@ -73,7 +73,10 @@ permissions:
       optional `qa: { command, description? }` — a SCOPED QA command for the per-task
       quality-gate (e.g. `npm test -- auth`); declare one only when a meaningful scoped
       command exists, otherwise omit it (the per-task gate then records `qa: "skipped"`
-      and the full `state.qa.command` runs at cycle scope),
+      and the full `state.qa.command` runs at cycle scope). With a single-task manifest the
+       per-task gate is skipped when the cycle-scope gates run, so a declared `qa.command`
+       only runs per task in multi-task manifests (the full `state.qa.command` still runs
+       at cycle scope),
      `acceptance_criteria[]` each with `verification: { type: "command", command }` or
      `{ type: "manual", instructions }` plus an optional `scope: "task" | "cycle"` (default `"task"`) — mark only integration-level criteria that need ALL tasks done as `"cycle"`; those are verified in the end-of-cycle audit, not in the per-task gate.
    - `tasks/<id>.md` — full detail per task: goal, approach, files to change, edge cases,

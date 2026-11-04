@@ -4,7 +4,10 @@ agent: driver
 ---
 
 Run the driver cycle. Every implement task is wrapped in a per-task spec-audit +
-quality-gate (scope=task) before the next task starts. `--qa-scope scoped` (default) runs each task's
+quality-gate (scope=task) before the next task starts — except for a single-task manifest
+when the cycle-scope spec-audit + quality-gate are in the run set: then the per-task gates
+are not spawned and the verdicts are recorded as `skipped` (the cycle-scope runs cover the
+only task). `--qa-scope scoped` (default) runs each task's
 manifest `qa.command` in the per-task gate; `--qa-scope full` runs the full QA command per
 task (the cycle-scope run always uses the full command).
 

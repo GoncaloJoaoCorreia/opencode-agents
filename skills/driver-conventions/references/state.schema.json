@@ -144,11 +144,11 @@
               "commit": { "type": "string", "description": "SHA once implemented" },
               "audit": {
                 "enum": ["pass", "fail", "skipped"],
-                "description": "per-task spec-audit verdict (scope=task). A task is done only with commit + audit pass + qa pass/skipped"
+                "description": "per-task spec-audit verdict (scope=task); also \"skipped\" for a single-task manifest when the cycle-scope gates run (per-task gate not spawned). A task is done only with commit + audit pass + qa pass/skipped"
               },
               "qa": {
                 "enum": ["pass", "fail", "skipped"],
-                "description": "per-task quality-gate verdict (scope=task)"
+                "description": "per-task quality-gate verdict (scope=task); also \"skipped\" for a single-task manifest when the cycle-scope gates run (per-task gate not spawned)"
               }
             }
           }
@@ -272,7 +272,7 @@
         },
         "runs": {
           "type": "array",
-          "description": "per-task (scope=task) quality-gate runs; the cycle-scope run stays in the top-level qa fields",
+          "description": "per-task (scope=task) quality-gate runs; the cycle-scope run stays in the top-level qa fields; no task-scope run is recorded for a single-task manifest when the cycle-scope gates run (verdict \"skipped\" is set on plan.tasks without a run)",
           "items": {
             "type": "object",
             "required": ["scope", "round", "verdict"],

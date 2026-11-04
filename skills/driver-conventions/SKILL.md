@@ -35,7 +35,9 @@ exchange. If you change a format here, update the schemas in `references/` too.
   `--qa-scope` sets `params.qa_scope` (default `"scoped"`). `--skip a,b,...` stores
   `params.skip[]` and marks those phases `status: "skipped"` — they are never spawned,
   including their per-task gate spawns inside the implement fan-out (`--skip spec-audit` /
-  `--skip quality-gate` ⇒ per-task `audit`/`qa` verdicts become `"skipped"`). `--skip` is
+  `--skip quality-gate` ⇒ per-task `audit`/`qa` verdicts become `"skipped"`). For a
+  single-task manifest whose cycle-scope spec-audit + quality-gate are in the run set,
+  the per-task gates are skipped the same way even without `--skip` (see §1). `--skip` is
   mutually exclusive with `--phases` (error if both). On a fresh run (no state.json),
   `preplan`/`plan` may not be skipped (hard error); on resume any phase may be skipped, but
   a skipped phase's outputs must already exist or the next phase that needs them stops with
@@ -75,7 +77,9 @@ Schema: `references/state.schema.json`. Key rules:
   forge CLI. The forge is cached repo-locally in `git config driver.forge` (§7.1).
 - `plan.tasks[] = { id, title, file, status: pending|done|skipped, commit, audit?, qa? }` —
   `audit`/`qa` are the per-task gate verdicts (pass|fail|skipped), set by the
-  per-task gate (always on).
+  per-task gate — which is skipped (verdicts recorded as `"skipped"` without spawning)
+  for a single-task manifest when the cycle-scope gates run (see the per-task gating
+  block below).
 - `plan.assumptions[]` / `plan.open_questions[]` — string mirrors of `plan.md`'s
   `## Assumptions` section and open questions, so the driver's approval gate can surface
   them without reading the file.
@@ -100,14 +104,25 @@ Schema: `references/state.schema.json`. Key rules:
   OpenCode). Left untouched on resume — it identifies the session that STARTED the run.
   Used by the driver-viz sidebar plugin for session-scoped run filtering (runs whose
   `session_id` matches the current session's ID; fallback to most-recent when null/no match).
-- **Per-task gating (always on):**
-  the driver's implement fan-out wraps each task before moving to the next:
-  `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`) with
-  bounded fix rounds → `quality-gate` (`scope: "task"`, `task_id`) with bounded fix rounds.
-  A task becomes `done` only with `commit` set AND `audit: "pass"` AND `qa: "pass"|"skipped"`
-  (per-task verdicts are stored on the `plan.tasks[]` entry). After ALL tasks, spec-audit and
-  quality-gate run once more with `scope: "cycle"` — the cycle quality-gate always runs the
-  full `state.qa.command`. `params.max_rounds` bounds the repair rounds of EACH gate.
+- **Per-task gating:** the driver's implement fan-out wraps each task before moving to
+  the next: `implement` (mode=task, one commit) → `spec-audit` (`scope: "task"`, `task_id`)
+  with bounded fix rounds → `quality-gate` (`scope: "task"`, `task_id`) with bounded fix
+  rounds. A task becomes `done` only with `commit` set AND `audit: "pass"` AND
+  `qa: "pass"|"skipped"` (per-task verdicts are stored on the `plan.tasks[]` entry).
+  **Single-task manifest skip:** when the manifest has exactly ONE task
+  (`manifest.tasks.length === 1` — fixed after the plan phase, stable across resume) AND
+  both cycle-scope gates are in the effective run set (`params.phases` if set, else all 8
+  phases, MINUS `params.skip`, and neither `spec-audit` nor `quality-gate` has
+  `status: "skipped"` in `state.phases`), the per-task gates are NOT spawned: the driver
+  sets `plan.tasks[0].audit = "skipped"` and `plan.tasks[0].qa = "skipped"` (mirroring
+  `--skip`; no `audit.rounds[]` / `qa.runs[]` task-scope entries), notes the skip in the
+  fan-out, and marks the task `done` once its commit is set — the cycle-scope
+  spec-audit/quality-gate cover the only task. Otherwise (multi-task manifest, or the
+  cycle gates not in the run set, e.g. `--phases preplan,plan,implement`) the per-task
+  gate runs as described, in both `qa_scope` modes — the skip never leaves a run ungated.
+  After ALL tasks, spec-audit and quality-gate run once more with `scope: "cycle"` — the
+  cycle quality-gate always runs the full `state.qa.command`. `params.max_rounds` bounds
+  the repair rounds of EACH gate.
 - `audit.rounds[]` entries carry `scope` + `task_id?`; `round` is 1-based per (scope, task).
   Task-scope evidence goes to `.plan/<slug>/audit-<task-id>-round-<n>.md`, cycle-scope to
   `.plan/<slug>/audit-round-<n>.md`.
@@ -116,7 +131,9 @@ Schema: `references/state.schema.json`. Key rules:
 - `qa.runs[]` records per-task quality-gate runs:
   `{ scope: "task", task_id, round, command, verdict: pass|fail|skipped, exit_code?, log, failures? }`
   — `verdict: "skipped"` when `params.qa_scope` is `"scoped"` and the task declares no
-  `qa.command` in the manifest (never run the full suite per task in scoped mode). The
+  `qa.command` in the manifest (never run the full suite per task in scoped mode) — and
+  no task-scope run is recorded at all for a single-task manifest when the cycle-scope
+  gates run (`"skipped"` is set on `plan.tasks[]` without spawning). The
   cycle-scope run keeps the top-level `qa.*` fields. `qa.fixes[] =
   { scope, task_id?, round, commit, failure_ids[] }` for quality-gate repair commits.
 
