@@ -17,3 +17,8 @@
 - What changed: `install.sh` user-facing output condensed — concise success block (version + Components line, no paths/`->` arrows), 2-step Next steps (`.plan/` gitignore hint + `/driver ABC-123`), warn-only user-level Linear MCP check in `check_prereqs`, stale removals tallied into a single line, shortened `--release` progress lines. Task gates green: audit pass (8/8 ACs), QA pass; cycle audit/review/QA all pass.
 - Commits: `69c22dcdc72f7ef9bb51d51ce7e602009b2264b0`
 - Plan: `.plan/G-29/plan.md`
+
+## 2026-11-04 — G-31 — Optimisation - History/Decisions records
+- What changed: repo-root wiring for the new `agent-context-check.py` agent-script — `install.sh` ships it (payload dirs, manifest, stale-file cleanup), `.github/workflows/release.yml` release self-test covers it, `README.md`/`AGENTS.md` document the write-history restraint guidance and the non-fatal context-length warning.
+- Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
+- Plan: `.plan/G-31/plan.md`

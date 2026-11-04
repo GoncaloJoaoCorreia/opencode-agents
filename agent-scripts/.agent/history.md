@@ -7,3 +7,8 @@
 - What changed: added `agent-scripts/qa-command.sh` owning the repo-local `git config driver.qa` cache — `get` prints one JSON line (`{command|null, source:cache}`), `set` validates (non-empty, single-line, ≤4096 chars, one trailing newline trimmed) and persists, exit 0/2 contract mirroring `detect-forge.sh`; 33-assertion suite in `agent-scripts/tests/test-qa-command.sh` wired into `run-tests.sh`; README contract docs. Suite green.
 - Commits: `07180716ed0cec3dda814668cf8d13382354ce8b`
 - Plan: `.plan/G-24/plan.md`
+
+## 2026-11-04 — G-31 — Optimisation - History/Decisions records
+- What changed: added `agent-scripts/agent-context-check.py` — scans all `.agent/{history,decisions}.md` in the target repo against a fixed 2,000 estimated-token limit per file (ceil(bytes/4)), single-line JSON stdout, over-limit reported as data (exit 0, ok:false), exit 2 on misuse; 17-test suite wired into `run-tests.sh`, green.
+- Commits: `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
+- Plan: `.plan/G-31/plan.md`

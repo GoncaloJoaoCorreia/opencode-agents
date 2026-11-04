@@ -12,3 +12,8 @@
 - What changed: `skills/driver-conventions/SKILL.md` gains §7.3 (driver.qa cache semantics: precedence, `--force` re-ask, skip not cached, manual override/clear) and the §8 entry for `qa-command.sh` (get/set, JSON stdout, exit 0/2); `references/state.schema.json` gains `qa.source` (`flag|cache|state|asked`) additively — no fields removed.
 - Commits: `cfdd073268a2fda37f09c1cf5bdb248d5b3641bb`
 - Plan: `.plan/G-24/plan.md`
+
+## 2026-11-04 — G-31 — Optimisation - History/Decisions records
+- What changed: `skills/driver-conventions/SKILL.md` §4 encodes the restraint rule for history/decisions entries and §8 gains the `agent-context-check.py` contract (fixed 2,000 estimated-token limit per file, exit 0 with ok:false on over-limit, exit 2 on misuse).
+- Commits: `086910077d75f2ee186e5959e5f31d727d209cb5`, `b7f14fe7eb2c8a5a9b536091e568c115c0dd33d6`
+- Plan: `.plan/G-31/plan.md`

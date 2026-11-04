@@ -11,3 +11,10 @@
 - Decision: (b) with strict validation — only non-empty, single-line, ≤4096-char commands are cacheable; `set` rejects multi-line input with exit 2; script exit 2 (not a repo / misuse) is surfaced, never swallowed.
 - Rationale: the agent-scripts mandate keeps mechanical logic out of prompts; strict validation keeps the cache a single git-config value that round-trips safely through JSON stdout; old installs without the script fail clearly ("agent-scripts not installed — re-run install.sh").
 - Consequences: multi-line QA commands cannot be cached per repo (rejected at `set` time; the run still works via `state.qa.command`); `driver.qa` lives in repo-local `.git/config`, never committed, shared across linked worktrees unless `extensions.worktreeConfig` — same caveat as `driver.forge`.
+
+## 2026-11-04 — G-31 — Fixed 2,000 estimated-token limit per .agent file, no override flag
+- Context: the context-length warning needed a size limit; the estimate ceil(bytes/4) is a heuristic and the result is data, never a gate.
+- Options considered: (a) configurable limit via a flag; (b) fixed 2,000 estimated tokens per file as a constant reported in the JSON output.
+- Decision: (b) — fixed limit, no override flag.
+- Rationale: a per-run knob for an advisory warning adds complexity nobody asked for; since the result is never fatal, a wrong limit cannot break a cycle.
+- Consequences: tuning the limit later requires a code change; over-limit is exit 0 with ok:false plus the over-limit paths, exit 2 only on misuse/unreadable repo.

@@ -18,3 +18,10 @@
 - Decision: (b). Review round 1 found R1-F1 (major): the initial implementation ran the cache read unconditionally, so `--force` with a populated cache never re-asked; fixed in `50190349` by gating the preplan cache read on `params.force` NOT set (re-verified fixed in review round 2, verdict pass).
 - Rationale: the cache is the freshest user-confirmed source per repo (mirrors `driver.forge`); `--force` semantically means "re-run even when done", so it must also bypass the cache; not caching the skip keeps quality-gate optional per run.
 - Consequences: `state.qa.source` records where the command came from (`flag|cache|state|asked`); quality-gate's cache fallback only triggers when `state.qa.command` is missing and never overrides a state command.
+
+## 2026-11-04 — G-31 — Context-length warning is non-fatal; missing installed agent-context-check.py degrades to a warning, not the §8 hard-stop
+- Context: write-history must flag over-long `.agent` files without ever breaking a cycle; old installs lack the new script while `driver-state.py`/`detect-modules.py` keep their §8 hard-stop.
+- Options considered: (a) treat a missing `agent-context-check.py` like the other §8 scripts (hard-stop "re-run install.sh"); (b) degrade to one `state.warnings` entry + continue for this script only.
+- Decision: (b) — the context-length check never blocks the docs commit or the done status.
+- Rationale: the warning is advisory data for the user; failing the whole cycle on an old install would punish exactly the users who need the reminder to re-install.
+- Consequences: `agents/driver/write-history.md` step 6 implements warning + continue; after re-running `install.sh` the check runs and each over-limit file becomes one `state.warnings` entry.
