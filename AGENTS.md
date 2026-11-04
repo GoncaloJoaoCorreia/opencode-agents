@@ -109,7 +109,9 @@ At most one phase renders as running (`effectiveStatuses` in `lib/state.ts` — 
 running phases show pending, so Audit is only in progress for run-scoped audit runs),
 the spinner/connector use a guaranteed non-white `spinner` tint (`lib/theme.ts`), and
 the Implement subtask dots are colored per task state with an animated in-progress dot
-(`taskIndicators`).
+(`taskIndicators`) that animates through the circular spinner `◐◓◑◒` (`TASK_DOT_SPINNER`
+in `lib/state.ts` — the phase-level running glyph keeps braille); single-task implement
+runs hide both the dots row and the `n/total` counter (`subtaskRowVisible`).
 Option `animate: false` (cli.json plugins object form) disables animation. Slug dirs are
 validated against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; unreadable state.json renders
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may

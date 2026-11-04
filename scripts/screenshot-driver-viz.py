@@ -74,7 +74,7 @@ LINES = [
     [("✓ ", SUCCESS, False), ("Plan", BASE, False), ("  ", MUTED, False), ("[", MUTED, False), ("Open Plan", MUTED, False, True), ("]", MUTED, False)],
     [("│", BORDER, False)],
     [("⠋ ", ACCENT, True), ("Implement", BASE, True), ("  2/3", MUTED, False)],
-    [("  ", MUTED, False), ("●●", SUCCESS, False), ("○", MUTED, False)],
+    [("  ", MUTED, False), ("●●", SUCCESS, False), ("◐", ACCENT, False)],
     [("┃", ACCENT, False)],
     [("▸ ", ACCENT, False), ("Audit", MUTED, False)],
     [("│", BORDER, False)],

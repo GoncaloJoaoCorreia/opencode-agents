@@ -117,6 +117,22 @@ export const scenarios: Scenario[] = [
     ],
   },
   {
+    name: "single-task",
+    // exactly one plan task → no dots row and no done/total counter (subtaskRowVisible),
+    // in every implement status; implement running here, phase glyph stays braille ⠋ at tick 0
+    setup: (dir) => [
+      run(dir, "TEST-1", 1000, {
+        session_id: "ses_test",
+        phases: {
+          preplan: { status: "done", started_at: at(10), completed_at: at(9) },
+          plan: { status: "done", started_at: at(9), completed_at: at(8) },
+          implement: { status: "running", started_at: at(8) },
+        },
+        plan: { tasks: [{ id: "t1", status: "pending" }] },
+      }),
+    ],
+  },
+  {
     name: "partial-theme",
     // custom theme missing feedback tokens — the historical palette crash; must not throw
     theme: { text: { base: "#e6edf3", muted: "#8b949e" } },

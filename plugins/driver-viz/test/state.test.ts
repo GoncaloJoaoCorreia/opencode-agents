@@ -22,6 +22,8 @@ import {
   runStartedAt,
   scanRuns,
   SLUG_RE,
+  subtaskRowVisible,
+  TASK_DOT_SPINNER,
   taskCounts,
   taskIndicators,
   type DriverState,
@@ -304,6 +306,22 @@ test("taskIndicators: done/failed/skipped/pending plus the in-progress task whil
     { id: "x", kind: "failed" },
   ])
   assert.deepEqual(taskIndicators(undefined, true), [])
+})
+
+test("TASK_DOT_SPINNER is the circular set ◐◓◑◒ with no braille codepoints", () => {
+  assert.deepEqual(TASK_DOT_SPINNER, ["◐", "◓", "◑", "◒"])
+  for (const frame of TASK_DOT_SPINNER) {
+    assert.equal(frame.length, 1)
+    const cp = frame.codePointAt(0)
+    assert.ok(cp !== undefined && (cp < 0x2800 || cp > 0x28ff), `braille codepoint U+${cp?.toString(16)} in ${frame}`)
+  }
+})
+
+test("subtaskRowVisible: hidden for 0/1 tasks, shown for 2+", () => {
+  assert.equal(subtaskRowVisible(undefined), false) // plan phase not done / unreadable
+  assert.equal(subtaskRowVisible([]), false)
+  assert.equal(subtaskRowVisible([{ id: "only", status: "pending" }]), false) // single task
+  assert.equal(subtaskRowVisible([{ id: "a", status: "done" }, { id: "b", status: "pending" }]), true)
 })
 
 test("planFilePath / reportFilePath are siblings of the run's state.json", () => {
