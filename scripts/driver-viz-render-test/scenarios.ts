@@ -154,6 +154,34 @@ export const scenarios: Scenario[] = [
       }),
     ],
   },
+  {
+    name: "fix-round",
+    // G-27: cycle-scope fix round in progress — spec-audit cycle round 1 failed and
+    // the fix-mode implement spawn pushed its marker (implement.runs[] entry with
+    // commit: null). No registry phase is running, so the Audit phase is promoted to
+    // running (spinner + ⏱ header) and a plugin-only "⠋ Fix r1" row renders under it.
+    setup: (dir) => [
+      run(dir, "TEST-1", 1000, {
+        session_id: "ses_test",
+        branch: "feat/TEST-1",
+        created_at: at(20),
+        phases: {
+          preplan: { status: "done", started_at: at(20), completed_at: at(19) },
+          plan: { status: "done", started_at: at(19), completed_at: at(18) },
+          implement: { status: "done", started_at: at(18), completed_at: at(10) },
+          "spec-audit": { status: "done", started_at: at(10), completed_at: at(8) },
+        },
+        plan: { tasks: [{ id: "t1", status: "done" }] },
+        implement: {
+          runs: [
+            { mode: "task", task_id: "t1", commit: "aaaaaaa1111", at: at(10) },
+            { mode: "fix", scope: "cycle", fix_target: "audit", round: 1, commit: null, at: at(2) },
+          ],
+        },
+        audit: { rounds: [{ scope: "cycle", round: 1, verdict: "fail" }] },
+      }),
+    ],
+  },
 ]
 
 export function prepareScenarioDir(base: string, name: string): string {

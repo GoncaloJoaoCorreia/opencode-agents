@@ -27,6 +27,34 @@ export interface TaskEntry {
   qa?: "pass" | "fail" | "skipped"
 }
 
+/** One `implement.runs[]` entry (schema allows additionalProperties — stay tolerant). */
+export interface ImplementRun {
+  mode?: string // "task" | "fix"
+  task_id?: string
+  scope?: string // fix mode: "task" | "cycle"
+  fix_target?: string // fix mode: "audit" | "review" | "qa"
+  round?: number
+  commit?: string | null // null = fix-mode spawn still in progress (marker pushed at spawn start)
+  summary?: string
+  at?: string
+}
+
+/** One `audit.rounds[]` / `review.rounds[]` entry. */
+export interface GateRoundEntry {
+  scope?: string
+  task_id?: string
+  round?: number
+  verdict?: string
+}
+
+/** One `*.fixes[]` entry (audit / review / qa). */
+export interface GateFixEntry {
+  scope?: string
+  task_id?: string
+  round?: number
+  commit?: string
+}
+
 // Subset of .plan/<slug>/state.json the sidebar renders (schema: skills/driver-conventions/
 // references/state.schema.json, which allows additionalProperties — stay tolerant).
 export interface DriverState {
@@ -38,7 +66,10 @@ export interface DriverState {
   params?: { skip?: string[]; phases?: string[] }
   phases?: Record<string, PhaseEntry>
   plan?: { tasks?: TaskEntry[] }
-  implement?: { runs?: unknown[] }
+  implement?: { runs?: ImplementRun[] }
+  audit?: { verdict?: string; rounds?: GateRoundEntry[]; fixes?: GateFixEntry[] }
+  review?: { verdict?: string; rounds?: GateRoundEntry[]; fixes?: GateFixEntry[] }
+  qa?: { verdict?: string; runs?: unknown[]; fixes?: GateFixEntry[] }
   pr?: { number?: number; url?: string; draft?: boolean }
   warnings?: string[]
 }
@@ -293,4 +324,109 @@ export function reportFilePath(run: RunInfo): string {
 /** True when every registry phase is done/skipped — the run completed successfully. */
 export function runCompleted(statuses: PhaseStatus[]): boolean {
   return statuses.length > 0 && statuses.every((s) => s === "done" || s === "skipped")
+}
+
+/** The three gate phases a cycle-scope fix round can belong to. */
+export type GateId = "spec-audit" | "code-review" | "quality-gate"
+
+export interface FixRoundInfo {
+  gate: GateId
+  round: number
+  status: "running" | "landed" // running = fix spawn in progress (no commit yet); landed = fix committed, gate re-run pending
+}
+
+/** fix_target → owning gate phase (driver-conventions §1 fix lists). */
+const FIX_TARGET_GATES: Record<string, GateId> = {
+  audit: "spec-audit",
+  review: "code-review",
+  qa: "quality-gate",
+}
+
+/** Fixes of a gate that belong to the cycle scope (task-scope repairs are ignored). */
+function cycleFixes(fixes: GateFixEntry[] | undefined): GateFixEntry[] {
+  return (fixes ?? []).filter((f) => f?.scope !== "task")
+}
+
+function maxRound(entries: { round?: number }[]): number {
+  let m = 0
+  for (const e of entries) if (typeof e?.round === "number" && e.round > m) m = e.round
+  return m
+}
+
+/**
+ * The cycle-scope fix round currently in progress (G-27), or null. Pure — never throws.
+ *
+ * Primary signal (explicit marker): the last `implement.runs[]` entry with
+ * `mode === "fix"` and `scope === "cycle"` — pushed at fix-spawn start with
+ * `commit: null` and filled after the commit. `commit` null/missing → "running",
+ * commit present → "landed"; `fix_target` maps to the owning gate phase. A
+ * `commit: null` entry is stale once any later `runs[]` entry carries a commit
+ * (crashed spawn) — it is skipped and the scan continues backwards.
+ *
+ * Fallback (legacy states whose driver only appended `runs[]` at the end): for each
+ * gate, the latest cycle-scope round with verdict `fail` and no matching `fixes[]`
+ * entry yet → "running"; a matching cycle fix for that round but no later round →
+ * "landed". Sources: `audit.rounds[]` + `audit.fixes[]`, `review.rounds[]` +
+ * `review.fixes[]`, and `state.qa.verdict === "fail"` + `qa.fixes[]` (the cycle-scope
+ * qa verdict lives at the top level; qa has no rounds[], so the latest qa round is
+ * the highest fixed round — a fix entry implies its round failed — while the
+ * verdict still reads fail and no later round is recorded).
+ *
+ * Suppressed when the state is null/unreadable, when the run is completed, and for
+ * task-scope fixes (scope "task" is ignored — during the implement fan-out the
+ * Implement phase already shows running and the failed task dot shows ✗).
+ */
+export function fixRound(state: DriverState | null): FixRoundInfo | null {
+  if (!state) return null
+  if (runCompleted(PHASES.map((p) => phaseStatus(state, p.id)))) return null
+
+  // Primary: the explicit in-progress marker in implement.runs[].
+  const runs = state.implement?.runs ?? []
+  for (let i = runs.length - 1; i >= 0; i--) {
+    const entry = runs[i]
+    if (!entry || entry.mode !== "fix" || entry.scope !== "cycle") continue
+    if (entry.commit == null && runs.slice(i + 1).some((r) => r?.commit != null)) continue // stale marker
+    const gate = FIX_TARGET_GATES[entry.fix_target ?? ""]
+    if (!gate) continue
+    const round = typeof entry.round === "number" ? entry.round : 1
+    return { gate, round, status: entry.commit == null ? "running" : "landed" }
+  }
+
+  // Fallback: derive from the gate round/fix lists (legacy states, no marker).
+  const candidates: FixRoundInfo[] = []
+  const auditRounds = (state.audit?.rounds ?? []).filter((r) => r?.scope !== "task")
+  if (auditRounds.length > 0) {
+    const last = auditRounds[auditRounds.length - 1]
+    if (last?.verdict === "fail") {
+      const round = typeof last.round === "number" ? last.round : auditRounds.length
+      const landed = cycleFixes(state.audit?.fixes).some((f) => f?.round === round)
+      candidates.push({ gate: "spec-audit", round, status: landed ? "landed" : "running" })
+    }
+  } else if (state.audit?.verdict === "fail") {
+    candidates.push({ gate: "spec-audit", round: maxRound(cycleFixes(state.audit?.fixes)) + 1, status: "running" })
+  }
+  const reviewRounds = (state.review?.rounds ?? []).filter((r) => r?.scope !== "task")
+  if (reviewRounds.length > 0) {
+    const last = reviewRounds[reviewRounds.length - 1]
+    if (last?.verdict === "fail") {
+      const round = typeof last.round === "number" ? last.round : reviewRounds.length
+      const landed = cycleFixes(state.review?.fixes).some((f) => f?.round === round)
+      candidates.push({ gate: "code-review", round, status: landed ? "landed" : "running" })
+    }
+  } else if (state.review?.verdict === "fail") {
+    candidates.push({ gate: "code-review", round: maxRound(cycleFixes(state.review?.fixes)) + 1, status: "running" })
+  }
+  if (state.qa?.verdict === "fail") {
+    const m = maxRound(cycleFixes(state.qa?.fixes))
+    candidates.push(
+      m > 0
+        ? { gate: "quality-gate", round: m, status: "landed" } // fix committed, gate re-run pending
+        : { gate: "quality-gate", round: 1, status: "running" },
+    )
+  }
+  if (candidates.length === 0) return null
+  // Highest round wins; ties keep registry order (spec-audit before code-review before qa).
+  let best = candidates[0]
+  for (const c of candidates.slice(1)) if (c.round > best.round) best = c
+  return best
 }

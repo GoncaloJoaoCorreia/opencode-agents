@@ -9,6 +9,7 @@ import {
   effectiveStatuses,
   filterRunsBySession,
   findRepoRoot,
+  fixRound,
   formatElapsed,
   nextPendingIndex,
   parseISODate,
@@ -336,6 +337,255 @@ test("runCompleted only when every phase is done/skipped", () => {
   assert.equal(runCompleted(["done", "pending", "done", "done", "done", "done", "done"]), false)
   assert.equal(runCompleted(["done", "failed", "done", "done", "done", "done", "done"]), false)
   assert.equal(runCompleted([]), false)
+})
+
+// --- fixRound (G-27): cycle-scope fix-round derivation -------------------------------
+
+/** A mid-cycle state: preplan/plan/implement/spec-audit done, the rest pending. */
+function midCycleState(extra: Partial<DriverState> = {}): DriverState {
+  return {
+    phases: {
+      preplan: { status: "done" },
+      plan: { status: "done" },
+      implement: { status: "done" },
+      "spec-audit": { status: "done" },
+    },
+    ...extra,
+  }
+}
+
+test("fixRound: marker entry with commit null -> running, fix_target maps to the gate", () => {
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: {
+          runs: [{ mode: "fix", scope: "cycle", fix_target: "audit", round: 2, commit: null, at: "x" }],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 2, status: "running" },
+  )
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: { runs: [{ mode: "fix", scope: "cycle", fix_target: "review", round: 1, commit: null }] },
+      }),
+    ),
+    { gate: "code-review", round: 1, status: "running" },
+  )
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: { runs: [{ mode: "fix", scope: "cycle", fix_target: "qa", round: 3, commit: null }] },
+      }),
+    ),
+    { gate: "quality-gate", round: 3, status: "running" },
+  )
+})
+
+test("fixRound: marker entry with a commit -> landed", () => {
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: {
+          runs: [{ mode: "fix", scope: "cycle", fix_target: "audit", round: 1, commit: "abc123", at: "x" }],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 1, status: "landed" },
+  )
+})
+
+test("fixRound: the LAST cycle fix marker wins (task entries and older fix entries skipped)", () => {
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: {
+          runs: [
+            { mode: "fix", scope: "cycle", fix_target: "qa", round: 1, commit: "aaa" },
+            { mode: "task", task_id: "t1", commit: "bbb" },
+            { mode: "fix", scope: "cycle", fix_target: "audit", round: 2, commit: null },
+          ],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 2, status: "running" },
+  )
+})
+
+test("fixRound: task-scope fix marker is ignored (cycle-scope only)", () => {
+  const state = midCycleState({
+    phases: {
+      preplan: { status: "done" },
+      plan: { status: "done" },
+      implement: { status: "running" }, // implement fan-out in progress
+    },
+    implement: {
+      runs: [{ mode: "fix", scope: "task", task_id: "t1", fix_target: "audit", round: 1, commit: null }],
+    },
+  })
+  assert.equal(fixRound(state), null)
+})
+
+test("fixRound: stale marker (commit null but a later entry has a commit) -> skipped/null", () => {
+  assert.equal(
+    fixRound(
+      midCycleState({
+        implement: {
+          runs: [
+            { mode: "fix", scope: "cycle", fix_target: "audit", round: 1, commit: null },
+            { mode: "task", task_id: "t2", commit: "deadbeef" },
+          ],
+        },
+      }),
+    ),
+    null,
+  )
+  // ...but a later cycle fix entry with a commit is used instead
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: {
+          runs: [
+            { mode: "fix", scope: "cycle", fix_target: "audit", round: 1, commit: null },
+            { mode: "fix", scope: "cycle", fix_target: "qa", round: 2, commit: "cafe" },
+          ],
+        },
+      }),
+    ),
+    { gate: "quality-gate", round: 2, status: "landed" },
+  )
+})
+
+test("fixRound: marker takes precedence over the legacy rounds/fixes fallback", () => {
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        implement: { runs: [{ mode: "fix", scope: "cycle", fix_target: "audit", round: 2, commit: "abc" }] },
+        audit: { rounds: [{ scope: "cycle", round: 1, verdict: "fail" }] },
+      }),
+    ),
+    { gate: "spec-audit", round: 2, status: "landed" },
+  )
+})
+
+test("fixRound: legacy fallback — audit round fail without a fix entry -> running", () => {
+  assert.deepEqual(
+    fixRound(midCycleState({ audit: { rounds: [{ scope: "cycle", round: 1, verdict: "fail" }] } })),
+    { gate: "spec-audit", round: 1, status: "running" },
+  )
+  // a passing latest round means the gate moved on -> null
+  assert.equal(
+    fixRound(
+      midCycleState({
+        audit: {
+          rounds: [
+            { scope: "cycle", round: 1, verdict: "fail" },
+            { scope: "cycle", round: 2, verdict: "pass" },
+          ],
+        },
+      }),
+    ),
+    null,
+  )
+  // task-scope rounds are ignored
+  assert.equal(
+    fixRound(midCycleState({ audit: { rounds: [{ scope: "task", task_id: "t1", round: 1, verdict: "fail" }] } })),
+    null,
+  )
+})
+
+test("fixRound: legacy fallback — matching cycle fix for the failed round -> landed", () => {
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        audit: {
+          rounds: [{ scope: "cycle", round: 1, verdict: "fail" }],
+          fixes: [{ scope: "cycle", round: 1, commit: "abc" }],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 1, status: "landed" },
+  )
+  // a fix for an older round only -> the latest round is still unfixed -> running
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        audit: {
+          rounds: [
+            { scope: "cycle", round: 1, verdict: "fail" },
+            { scope: "cycle", round: 2, verdict: "fail" },
+          ],
+          fixes: [{ scope: "cycle", round: 1, commit: "abc" }],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 2, status: "running" },
+  )
+  // task-scope fixes do not count
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        audit: {
+          rounds: [{ scope: "cycle", round: 1, verdict: "fail" }],
+          fixes: [{ scope: "task", task_id: "t1", round: 1, commit: "abc" }],
+        },
+      }),
+    ),
+    { gate: "spec-audit", round: 1, status: "running" },
+  )
+})
+
+test("fixRound: legacy fallback for code-review (rounds carry no scope field)", () => {
+  assert.deepEqual(
+    fixRound(midCycleState({ review: { rounds: [{ round: 1, verdict: "fail" }] } })),
+    { gate: "code-review", round: 1, status: "running" },
+  )
+  assert.deepEqual(
+    fixRound(
+      midCycleState({
+        review: { rounds: [{ round: 1, verdict: "fail" }], fixes: [{ round: 1, commit: "abc" }] },
+      }),
+    ),
+    { gate: "code-review", round: 1, status: "landed" },
+  )
+})
+
+test("fixRound: legacy fallback via the top-level state.qa.verdict", () => {
+  // verdict fail, no fixes yet -> round 1 running
+  assert.deepEqual(fixRound(midCycleState({ qa: { verdict: "fail" } })), {
+    gate: "quality-gate",
+    round: 1,
+    status: "running",
+  })
+  // verdict fail with a cycle fix landed -> landed at the highest fixed round (re-run pending)
+  assert.deepEqual(
+    fixRound(midCycleState({ qa: { verdict: "fail", fixes: [{ scope: "cycle", round: 2, commit: "abc" }] } })),
+    { gate: "quality-gate", round: 2, status: "landed" },
+  )
+  // task-scope qa fixes do not count
+  assert.deepEqual(
+    fixRound(midCycleState({ qa: { verdict: "fail", fixes: [{ scope: "task", task_id: "t1", round: 1, commit: "x" }] } })),
+    { gate: "quality-gate", round: 1, status: "running" },
+  )
+  // verdict pass -> null
+  assert.equal(fixRound(midCycleState({ qa: { verdict: "pass" } })), null)
+})
+
+test("fixRound: suppressed for completed runs and unreadable state, even with fail data", () => {
+  assert.equal(fixRound(null), null)
+  const done: DriverState = {
+    phases: Object.fromEntries(
+      ["preplan", "plan", "implement", "spec-audit", "code-review", "quality-gate", "pr"].map((p) => [
+        p,
+        { status: "done" },
+      ]),
+    ),
+    implement: { runs: [{ mode: "fix", scope: "cycle", fix_target: "audit", round: 1, commit: null }] },
+    audit: { rounds: [{ scope: "cycle", round: 1, verdict: "fail" }] },
+    qa: { verdict: "fail" },
+  }
+  assert.equal(fixRound(done), null)
 })
 
 test("theme spinner is a guaranteed non-white color", () => {

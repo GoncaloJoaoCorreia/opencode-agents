@@ -5,6 +5,7 @@
 //   ┃ Implement  3/7
 //     ●●◐○○○               <- per-task dots, colored by state, animated while running
 //   ○ Audit
+//     ⠋ Fix r1              <- plugin-only row while a cycle-scope fix round runs (G-27)
 //   ...
 //   ──────────────
 //   Total 1h02m03s  Tokens 128k  +412 -37  [Open report]   <- completion block
@@ -18,6 +19,7 @@ import { PHASES } from "./phases.ts"
 import {
   effectiveStatuses,
   findRepoRoot,
+  fixRound,
   formatElapsed,
   nextPendingIndex,
   phaseStatus,
@@ -32,6 +34,7 @@ import {
   TASK_DOT_SPINNER,
   taskCounts,
   taskIndicators,
+  type FixRoundInfo,
   type PhaseStatus,
   type RunInfo,
   type TaskKind,
@@ -149,10 +152,23 @@ export function DriverSection(props: {
 }) {
   const c = (): Palette => palette((props.context.theme ?? {}) as Record<string, unknown>)
   const run = () => pickRun(props.runs(), props.activeSlug())
-  // Single-running rule: at most one phase renders as running (Audit fix — spec-audit
-  // only shows running for run-scoped audit runs, not during Implement subtasks).
-  const statuses = (): PhaseStatus[] =>
-    effectiveStatuses(PHASES.map((p) => phaseStatus(run()?.state ?? null, p.id)))
+  // Cycle-scope fix round (G-27): the fix-mode implement spawn pushes an
+  // implement.runs[] marker (commit: null while running); fixRound() derives it
+  // (marker first, legacy rounds/fixes fallback for older drivers).
+  const fix = () => fixRound(run()?.state ?? null)
+  // Single-running rule: at most one phase renders as running (effectiveStatuses).
+  // While a cycle-scope fix runs and NO registry phase is running, the owning gate
+  // phase is promoted to running so the spinner + ⏱ header keep going — applied
+  // after effectiveStatuses, so the single-running rule still caps at one.
+  const statuses = (): PhaseStatus[] => {
+    const s = effectiveStatuses(PHASES.map((p) => phaseStatus(run()?.state ?? null, p.id)))
+    const f = fix()
+    if (f && f.status === "running" && runningIndex(s) === -1) {
+      const idx = PHASES.findIndex((p) => p.id === f.gate)
+      if (idx >= 0) s[idx] = "running"
+    }
+    return s
+  }
   const running = () => runningIndex(statuses())
   const nextPending = () => nextPendingIndex(statuses())
   const startedAt = () => runStartedAt(run()?.state ?? null)
@@ -201,6 +217,17 @@ export function DriverSection(props: {
       default:
         return c().muted
     }
+  }
+
+  // The plugin-only fix-round row under the owning gate phase (G-27): null when no
+  // cycle-scope fix round targets this phase, or once the gate phase is done.
+  // The row is rendered ad hoc here — it is NOT part of lib/phases.ts, which must
+  // keep mirroring the 7 registry phases of agents/driver.md §6.
+  const fixRowFor = (phaseId: string, idx: number): FixRoundInfo | null => {
+    const f = fix()
+    if (!f || f.gate !== phaseId) return null
+    if (statuses()[idx] === "done") return null
+    return f
   }
 
   return (
@@ -318,6 +345,30 @@ export function DriverSection(props: {
                         <span style={{ fg: c().muted }}>{"…"}</span>
                       </Show>
                     </text>
+                  </Show>
+                  {/* G-27: extra plugin-only "Fix rN" row directly under the owning
+                      gate phase — braille spinner while the fix spawn runs (static ◐
+                      with animate:false), ✓ once the fix has landed. */}
+                  <Show when={fixRowFor(phase.id, i())}>
+                    {(f) => (
+                      <text>
+                        <span style={{ fg: c().muted }}>{"  "}</span>
+                        <span
+                          style={{
+                            fg: f().status === "running" ? c().spinner : c().success,
+                            bold: f().status === "running",
+                          }}
+                        >
+                          {f().status === "running"
+                            ? props.animate
+                              ? SPINNER[props.tick() % SPINNER.length]
+                              : "◐"
+                            : "✓"}
+                          {" Fix r"}
+                          {f().round}
+                        </span>
+                      </text>
+                    )}
                   </Show>
                 </>
               )

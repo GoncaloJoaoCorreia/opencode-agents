@@ -112,6 +112,14 @@ the Implement subtask dots are colored per task state with an animated in-progre
 (`taskIndicators`) that animates through the circular spinner `◐◓◑◒` (`TASK_DOT_SPINNER`
 in `lib/state.ts` — the phase-level running glyph keeps braille); single-task implement
 runs hide both the dots row and the `n/total` counter (`subtaskRowVisible`).
+While a **cycle-scope fix round** runs (fix-mode implement spawn after a failed gate round —
+detected via the explicit `implement.runs[]` marker with `commit: null`, with a fallback
+derivation from the `audit`/`review`/`qa` rounds + fixes lists for legacy states), the
+owning gate phase is promoted to running (`fixRound` in `lib/state.ts`, applied after
+`effectiveStatuses`, so the single-running rule still caps at one) and a plugin-only
+`↻ Fix rN` row renders directly under it in `FlowChart.tsx` (spinner while the fix runs,
+`✓` once landed, hidden once the gate phase is done; the row is NOT in `lib/phases.ts` —
+the registry keeps exactly the 7 phases).
 Option `animate: false` (cli.json plugins object form) disables animation. Slug dirs are
 validated against `^[A-Z][A-Z0-9]*-[0-9]+$` before any path use; unreadable state.json renders
 as "unreadable" instead of crashing. Theme colors resolve defensively (custom themes may
