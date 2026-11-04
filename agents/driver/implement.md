@@ -37,6 +37,10 @@ cycle-scope gates in the run set, the per-task gate itself is skipped (the drive
 2. Read the task file, the manifest entry, and `plan.md`. Read the code in scope
    (the `files` globs). In fix mode, read each finding's file:line.
 3. Implement. Stay scoped — no drive-by refactors. In fix mode, fix only the listed findings.
+   **Fix mode only:** BEFORE touching any code, record the in-progress marker in
+   `state.json` — push the `implement.runs[]` entry with `commit: null` at spawn start
+   (see the output contract below), so consumers (driver-viz) can see the repair round
+   is running.
 4. Self-verify: run the task's `verification.command`s (and the scoped `qa.command` when
    this spawn is a task-scope fix for a qa failure).
    If a failure is caused by another not-yet-done task (`depends_on`), note it and stop —
@@ -69,10 +73,26 @@ cycle-scope gates in the run set, the per-task gate itself is skipped (the drive
     `state.audit.fixes[] += { scope, task_id?, round, commit, finding_ids }`,
     `state.review.fixes[] += { round, commit, finding_ids }`, or
     `state.qa.fixes[] += { scope, task_id?, round, commit, failure_ids }`
-  - append ONE entry per spawn to `state.implement.runs[] =
-    { mode: "task"|"fix", task_id?, round?, commit: <sha>, summary, at }` —
-    `phases.implement` stays a single aggregate `{ status, summary, ... }` entry, do NOT
-    append per-spawn entries to it.
+  - `state.implement.runs[]` gets ONE entry per spawn —
+    `{ mode: "task"|"fix", task_id?, round?, scope?, fix_target?, commit, summary?, at }`:
+    - **task mode (unchanged):** a single push at the END of the spawn, with the commit
+      SHA: `{ mode: "task", task_id, commit: <sha>, summary, at }`.
+    - **fix mode:** push the entry at SPAWN START, BEFORE implementing, with
+      `commit: null`:
+      `"$SCRIPTS/driver-state.py" push "$statePath" implement.runs '{"mode":"fix","scope":"<task|cycle>","fix_target":"<audit|review|qa>","round":<n>,"task_id":"<id>?","commit":null,"at":"<spawn-start ISO>"}'`
+      (single-quoted JSON; write the entry JSON to a file under `.plan/<slug>/` if
+      needed — never interpolate untrusted text). Remember the pushed index (the
+      current `implement.runs` length minus one — get it via
+      `driver-state.py get "$statePath" implement.runs` and count, or track it locally).
+      AFTER `git commit`, fill the SAME array entry by numeric index — never push a
+      second `runs[]` entry for the same spawn:
+      `"$SCRIPTS/driver-state.py" set "$statePath" implement.runs.<idx>.commit '"<sha>"'`
+      and
+      `"$SCRIPTS/driver-state.py" set "$statePath" implement.runs.<idx>.summary '"<short summary>"'`.
+      A `commit: null` entry whose spawn died stays null — consumers treat it as stale
+      once a later `implement.runs[]` entry carries a commit or the run is completed.
+    - `phases.implement` stays a single aggregate `{ status, summary, ... }` entry, do NOT
+      append per-spawn entries to it.
 - Return a SHORT summary: task id or finding/failure ids, commit SHA, files changed,
   verification results, anything noteworthy.
 
