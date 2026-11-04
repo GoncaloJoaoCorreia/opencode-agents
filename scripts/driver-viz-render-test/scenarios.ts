@@ -51,7 +51,9 @@ export const scenarios: Scenario[] = [
           ],
         },
       }),
-      run(dir, "TEST-2", 1000, null),
+      // parseable same-session state so the two-run "1/2" position counter stays covered
+      // (a state-null run would now be filtered out by the strict session filter)
+      run(dir, "TEST-2", 1000, { session_id: "ses_test" }),
     ],
   },
   {
@@ -81,7 +83,21 @@ export const scenarios: Scenario[] = [
   },
   {
     name: "unreadable-state",
-    setup: (dir) => [run(dir, "TEST-1", 1000, null)], // state.json missing/unparseable
+    // state.json missing/unparseable (state null) -> no session_id -> strict filter drops
+    // the run -> empty frame (section hidden until the file parses)
+    setup: (dir) => [run(dir, "TEST-1", 1000, null)],
+  },
+  {
+    name: "no-matching-run",
+    // G-32: runs belong to another session (ses_other) while the scenario session is
+    // ses_test -> strict filter yields no runs -> empty frame (section hidden)
+    setup: (dir) => [
+      run(dir, "TEST-1", 1000, {
+        session_id: "ses_other",
+        branch: "feat/TEST-1",
+        phases: { preplan: { status: "running", started_at: at(3) } },
+      }),
+    ],
   },
   {
     name: "skipped-and-failed",

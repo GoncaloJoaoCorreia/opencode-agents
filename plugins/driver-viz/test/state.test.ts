@@ -169,21 +169,31 @@ test("filterRunsBySession returns only the runs of the given session", () => {
   assert.deepEqual(out.map((r) => r.slug), ["AAA-1", "CCC-3"])
 })
 
-test("filterRunsBySession: no match -> input unchanged (graceful fallback)", () => {
+test("filterRunsBySession: no match -> empty (strict, no fallback)", () => {
   const runs = [run("AAA-1", "ses_A"), run("BBB-2", "ses_B")]
-  assert.equal(filterRunsBySession(runs, "ses_Z"), runs)
+  assert.deepEqual(filterRunsBySession(runs, "ses_Z"), [])
 })
 
-test("filterRunsBySession: all runs session_id null -> input unchanged", () => {
+test("filterRunsBySession: all runs session_id null -> empty (never match a known session)", () => {
   const runs = [run("AAA-1", null), run("BBB-2", null)]
-  assert.equal(filterRunsBySession(runs, "ses_A"), runs)
+  assert.deepEqual(filterRunsBySession(runs, "ses_A"), [])
 })
 
-test("filterRunsBySession: null/undefined/empty sessionID -> input unchanged", () => {
+test("filterRunsBySession: null/undefined/empty sessionID -> empty (section hidden)", () => {
   const runs = [run("AAA-1", "ses_A"), run("BBB-2", "ses_B")]
-  assert.equal(filterRunsBySession(runs, null), runs)
-  assert.equal(filterRunsBySession(runs, undefined), runs)
-  assert.equal(filterRunsBySession(runs, ""), runs)
+  assert.deepEqual(filterRunsBySession(runs, null), [])
+  assert.deepEqual(filterRunsBySession(runs, undefined), [])
+  assert.deepEqual(filterRunsBySession(runs, ""), [])
+})
+
+test("filterRunsBySession: unknown session ID hides everything even when runs exist", () => {
+  const runs = [run("AAA-1", "ses_A", 3), run("BBB-2", "ses_B", 2)]
+  assert.deepEqual(filterRunsBySession(runs, "ses_unknown"), [])
+})
+
+test("filterRunsBySession: a session_id null run never matches a known session", () => {
+  const runs = [run("AAA-1", null, 2), run("BBB-2", "ses_A", 1)]
+  assert.deepEqual(filterRunsBySession(runs, "ses_A").map((r) => r.slug), ["BBB-2"])
 })
 
 test("filterRunsBySession: empty runs -> empty", () => {
@@ -210,8 +220,8 @@ test("scan + filter integration: two slug dirs with different session_ids", () =
     assert.equal(runs.length, 2)
     assert.deepEqual(filterRunsBySession(runs, "ses_A").map((r) => r.slug), ["AAA-1"])
     assert.deepEqual(filterRunsBySession(runs, "ses_B").map((r) => r.slug), ["BBB-2"])
-    assert.equal(filterRunsBySession(runs, null), runs) // null sessionID -> both
-    assert.equal(filterRunsBySession(runs, "ses_Z"), runs) // no match -> both (fallback)
+    assert.deepEqual(filterRunsBySession(runs, null), []) // null sessionID -> hidden
+    assert.deepEqual(filterRunsBySession(runs, "ses_Z"), []) // no match -> hidden (strict)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

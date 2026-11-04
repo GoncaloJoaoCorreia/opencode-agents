@@ -9,9 +9,10 @@
 //   current session's ID are shown (the sidebar.content slot render input carries
 //   `sessionID`; fallback `ui.router.current()` when it is { type: "session", sessionID }).
 //   A newly started run of this session is switched to immediately; `/driver-viz`
-//   (palette: "Driver: show next run") cycles only this session's runs. When no run
-//   matches (e.g. all runs have `session_id: null` from an older driver) or the session
-//   ID is unknown, the most recently modified run is shown (previous behavior).
+//   (palette: "Driver: show next run") cycles only this session's runs. The filter is
+//   strict (G-32) — no fallback: when no run matches (e.g. all runs have `session_id:
+//   null` from an older driver) or the session ID is unknown, the list stays empty and
+//   the sidebar section is hidden.
 // - Palette fallbacks for the clickable sidebar actions: "Driver: open plan" (enabled once
 //   the plan phase is done) and "Driver: open report" (enabled when .plan/<slug>/report.md
 //   exists) open the file with the system default app (open/xdg-open via node:child_process).
@@ -67,8 +68,9 @@ export default Plugin.define({
 
     const sessionID = (): string | null => slotSessionID() ?? sessionIDFromRouter()
 
-    // Runs of the current session only; falls back to the unfiltered list when the
-    // session ID is unknown or no run matches yet (see filterRunsBySession).
+    // Runs of the current session only, strict (G-32): an unknown session ID or no
+    // matching run yields an empty list and the sidebar section renders nothing
+    // (see filterRunsBySession).
     const filteredRuns = (): RunInfo[] => filterRunsBySession(runs(), sessionID())
 
     // The run currently shown (selection, auto-switch, and palette commands all use it).

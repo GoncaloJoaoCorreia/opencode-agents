@@ -22,7 +22,7 @@ import { testRender } from "@opentui/solid"
 import { TextAttributes, rgbToHex, type CapturedFrame, type CapturedSpan } from "@opentui/core"
 import { createSignal } from "solid-js"
 import { DriverSection } from "../../plugins/driver-viz/lib/FlowChart.tsx"
-import type { RunInfo } from "../../plugins/driver-viz/lib/state.ts"
+import { filterRunsBySession, type RunInfo } from "../../plugins/driver-viz/lib/state.ts"
 import { FIXED_NOW, prepareScenarioDir, scenarios } from "./scenarios.ts"
 
 // Freeze time so the ⏱ elapsed line is deterministic.
@@ -122,7 +122,9 @@ async function renderScenario(
     () =>
       DriverSection({
         context,
-        runs: runsSig,
+        // Apply the production session filter exactly like tui.tsx, so the snapshots
+        // exercise the real filtering path (strict: no matching run -> empty frame).
+        runs: () => filterRunsBySession(runsSig(), opts.sessionID ?? "ses_test"),
         activeSlug,
         tick,
         animate: opts.animate ?? true,
